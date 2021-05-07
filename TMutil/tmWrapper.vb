@@ -107,6 +107,126 @@ Public Class TM_Client
         getProjectsOfGroup = JsonConvert.DeserializeObject(Of List(Of tmProjInfo))(jsoN)
     End Function
 
+
+
+    Public Function loadAllGroups(ByRef T As TM_Client) As List(Of tmGroups)
+
+        Dim GRP As List(Of tmGroups) = T.getGroups
+
+        For Each G In GRP
+            G.AllProjInfo = T.getProjectsOfGroup(G)
+            Console.WriteLine(G.Name + ": " + G.AllProjInfo.Count.ToString + " models")
+            For Each P In G.AllProjInfo
+                P.Model = T.getProject(P.Id)
+                Console.WriteLine(vbCrLf)
+                Console.WriteLine(col5CLI("Proj/Comp Name", "#/TYPE COMP", "# THR", "# SR"))
+                Console.WriteLine(col5CLI("--------------", "-----------", "-----", "----"))
+                With P.Model
+                    T.addThreats(P.Model, P.Id) 'add in details of threats not inside Diagram API (eg Protocols)
+                    Console.WriteLine(col5CLI(P.Name + " [Id " + P.Id.ToString + "]", .Nodes.Count.ToString, P.Model.modelNumThreats.ToString, P.Model.modelNumThreats(True).ToString))
+                    '     Console.WriteLine(col5CLI("   ", "TYPE", "# THR", "# SR"))
+                    For Each N In .Nodes
+                        If N.category = "Collection" Then
+                            Console.WriteLine(col5CLI(" >" + N.FullName, "Collection", "", ""))
+                            GoTo doneHere
+                        End If
+                        If N.category = "Project" Then
+                            N.ComponentName = N.FullName
+                            N.ComponentTypeName = "Nested Model"
+                            '                            Console.WriteLine(col5CLI(" >" + N.FullName, "Nested Model", "", ""))
+                            'GoTo doneHere
+                        End If
+                        Console.WriteLine(col5CLI(" >" + N.ComponentName, N.ComponentTypeName, N.listThreats.Count.ToString, N.listSecurityRequirements.Count.ToString))
+                        '                        Console.WriteLine("------------- " + N.Name + "-Threats:" + N.listThreats.Count.ToString + "-SecRqrmnts:" + N.listSecurityRequirements.Count.ToString)
+doneHere:
+                    Next
+                End With
+                If P.Model.Nodes.Count Then Console.WriteLine(col5CLI("----------------------------------", "------------------------", "------", "------"))
+            Next
+
+            Console.WriteLine(vbCrLf)
+        Next
+
+        Return GRP
+    End Function
+
+    Public Sub addThreats(ByRef tmMOD As tmModel, ByVal projID As Long)
+        ' not all threats are included in COMPONENTS API
+        ' to capture all of tmModel and Nodes, pull in Threats API for Project
+        ' this routine bridges the gap between info provided in 2 APIs and puts 
+        ' as much into tmModel as it can
+
+        Dim jsoN$ = getAPIData("/api/project/" + projID.ToString + "/threats?openStatusOnly=false")
+        Dim tNodes As New List(Of tmTThreat)
+
+        tNodes = JsonConvert.DeserializeObject(Of List(Of tmTThreat))(jsoN)
+
+        For Each T In tNodes
+            If T.SourceType = "Link" Then
+                Dim mNode As Integer
+                ' first check parent node.. if parent is a threat model (category=Project)
+                ' then do not add the link
+                mNode = tmMOD.ndxOFnode(T.SourceId)
+                If mNode <> -1 Then
+                    'unless id > 300000 and subsequent code creates artificial node
+                    'this should be a project/nested model.. do not add these links
+                    If tmMOD.Nodes(mNode).category = "Project" Then GoTo skipThose
+                End If
+
+                mNode = tmMOD.ndxOFnode(300000 + T.SourceId)
+                If mNode = -1 Then
+                    Call addNode(tmMOD, T)
+                End If
+                mNode = tmMOD.ndxOFnode(300000 + T.SourceId)
+
+                With tmMOD.Nodes(mNode)
+                    Dim newT As New tmProjThreat
+                    newT.Name = T.ThreatName
+                    newT.StatusName = T.StatusName
+                    newT.Id = T.ThreatId
+                    newT.Description = T.Description
+                    ' notes is missing!
+                    newT.RiskName = T.ActualRiskName
+                    .listThreats.Add(newT)
+                    .threatCount += 1
+                End With
+            End If
+            'If Mid(T.ThreatName, 1, 4) = "11111111CVE-" Then
+            ' have to manually add in CPE-related threats to node collection
+            ' correction
+            ' CVEs are added as Threats to nodes in the DIAGRAM API, but the "numThreats" property does not
+            ' include CVEs as threats. Use node.listThreats.nodecount in lieu of node.numThreats API property
+            '
+            ' protocols of Nested Models are included in the counts of threats as components
+
+
+skipThose:
+        Next
+
+        'getGroups = JsonConvert.DeserializeObject(Of List(Of tmGroups))(jsoN)
+    End Sub
+
+    Public Sub addNode(ByRef tmMOD As tmModel, ByRef T As tmTThreat)
+        ' create node inside tmMOD based on threat T (from Threats API)
+        'Dim tmMOD As tmModel = tmPROJ.Model
+
+        Dim newNode As tmNodeData = New tmNodeData
+
+        If T.SourceType = "Link" Then
+            newNode.Id = T.SourceId + 300000
+            newNode.category = "Component"
+            newNode.Name = T.SourceDisplayName
+            newNode.type = "Link"
+            newNode.ComponentName = T.SourceName
+            newNode.ComponentTypeName = "Protocol"
+
+            tmMOD.Nodes.Add(newNode)
+            Exit Sub
+        End If
+
+
+    End Sub
+
     Public Function getProject(projID As Long) As tmModel
         getProject = New tmModel
 
@@ -154,51 +274,69 @@ Public Class tmProjInfo
     Public [Type] As String
     Public CreatedByUserEmail$
     Public Model As tmModel
+    'Public nodesFromThreats As Integer 'beginning at 300k, nodes from threats like HTTPS
 End Class
 
 Public Class tmProjThreat
-        Public Id As Long
-        'Public Guid as system.guid 'nulls
-        Public Name$
-        Public Description$
-        Public RiskId As Integer
-        Public RiskName$
-        Public LibraryId As Integer
-        Public Labels$
-        Public Reference$
-        Public Automated As Boolean
-        'public ThreatAttributes$ 'nulls
-        Public StatusName$
-        Public IsHidden As Boolean
-        Public CompanyId As Integer
-        'Public SharingType$
-        'Public ReadOnly As Boolean
-        Public isDefault As Boolean
-        Public DateCreated$
-        Public LastUpdated$
-        Public DepartmentId As Integer
-        Public DepartmentName$
-        'public Version$ 
-        Public IsSystemDepartment As Boolean
+    ' these threats come from the DIAGRAM API as part of nodeArray
+    Public Id As Long
+    'Public Guid as system.guid 'nulls
+    Public Name$
+    Public Description$
+    Public RiskId As Integer
+    Public RiskName$
+    Public LibraryId As Integer
+    Public Labels$
+    Public Reference$
+    Public Automated As Boolean
+    'public ThreatAttributes$ 'nulls
+    Public StatusName$
+    Public IsHidden As Boolean
+    Public CompanyId As Integer
+    'Public SharingType$
+    'Public ReadOnly As Boolean
+    Public isDefault As Boolean
+    Public DateCreated$
+    Public LastUpdated$
+    Public DepartmentId As Integer
+    Public DepartmentName$
+    'public Version$ 
+    Public IsSystemDepartment As Boolean
 
-    End Class
+End Class
+Public Class tmTThreat
+    Public Id As Long
 
-    Public Class tmProjSecReq
-        Public Id As Long
-        Public Name$
-        Public Description$
-        Public RiskId As Integer
-        Public IsCompensatingControl As Boolean
-        Public RiskName$
-        Public Labels$
-        Public LibraryId As Integer
-        'Public Guid as System.Guid
-        Public StatusName$
-        Public SourceName$
-        Public IsHidden As Boolean
-    End Class
+    Public ThreatName$
+    Public SourceName$
+    Public SourceDisplayName$
+    Public ThreatId As Integer
+    Public ActualRiskName$
+    Public StatusName$
+    Public Description$
+    Public Notes$
+    Public SourceId As Long
+    Public SourceType$
 
-    Public Class tmNodeData
+End Class
+
+
+Public Class tmProjSecReq
+    Public Id As Long
+    Public Name$
+    Public Description$
+    Public RiskId As Integer
+    Public IsCompensatingControl As Boolean
+    Public RiskName$
+    Public Labels$
+    Public LibraryId As Integer
+    'Public Guid as System.Guid
+    Public StatusName$
+    Public SourceName$
+    Public IsHidden As Boolean
+End Class
+
+Public Class tmNodeData
         Public key As Single
         Public category$
         Public Name$
@@ -229,13 +367,51 @@ Public Class tmProjThreat
     Public ComponentName$
     Public Id As Long
     Public threatCount As Integer
+
+    Public Sub New()
+        Me.listSecurityRequirements = New List(Of tmProjSecReq)
+        Me.listThreats = New List(Of tmProjThreat)
+
+    End Sub
 End Class
 
-    Public Class tmModel
-        Public Id As Long
-        Public Name$
-        Public IsAppliedForApproval As Boolean
-        Public Guid As System.Guid
-        Public Nodes As List(Of tmNodeData)
-    End Class
+Public Class tmModel
+    ' model is built from DIAGRAM API
+    ' includes all threats and SRs except
+    '       protocol threats
+    '       CPE CVEs
+    '       Nested Models
+    ' these require lookup into Threats API
+    ' Can correlate CPE CVEs to Component of SourceId
+    ' Pull Nested Model Threats in and also store to SourceId
+
+    Public Id As Long
+    Public Name$
+    Public IsAppliedForApproval As Boolean
+    Public Guid As System.Guid
+    Public Nodes As List(Of tmNodeData)
+
+    Public Function modelNumThreats(Optional ByVal SecReqInstead As Boolean = False) As Integer
+        Dim nuM As Integer = 0
+        For Each N In Me.Nodes
+            If SecReqInstead Then nuM += N.listSecurityRequirements.Count Else nuM += N.listThreats.Count
+        Next
+        Return nuM
+    End Function
+
+    Public Function ndxOFnode(ByVal idOFnode As Long) As Integer
+        'finds object (for now, the node of a model) matching idOFnode
+        Dim K As Long = 0
+
+        For Each N In Me.Nodes
+            If N.Id = idOFnode Then
+                Return K
+            End If
+            K += 1
+        Next
+
+        Return -1
+    End Function
+
+End Class
 

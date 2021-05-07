@@ -5,6 +5,20 @@ Imports System.IO
 
 
 Module modCommon
+    Public Function col5CLI(arg1$, arg2$, arg3$, arg4$, Optional ByVal arg5$ = "") As String
+        col5CLI = ""
+        arg1 = Mid(arg1, 1, 34)
+        arg2 = Mid(arg2, 1, 24)
+        col5CLI = arg1 + spaces(35 - Len(arg1)) + arg2 + spaces(25 - Len(arg2)) + arg3 + spaces(10 - Len(arg3))
+        col5CLI += arg4 + spaces(10 - Len(arg4)) + arg5 + spaces(10 - Len(arg5))
+
+
+    End Function
+
+    Public Function fLine(arg1$, arg2$, Optional ByVal numSpaces As Integer = 25) As String
+        Return arg1 + spaces(numSpaces - Len(arg1)) + arg2
+    End Function
+
 
     Public Sub addLoginCreds(ByRef AA As TM_Client, uN$, pW$)
         Dim S3 As New Simple3Des("7w6e87twryut24876wuyeg")
