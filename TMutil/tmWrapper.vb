@@ -97,6 +97,13 @@ Public Class TM_Client
 
     End Function
 
+    Public Function getLabels(Optional ByVal isSystem As Boolean = False) As List(Of tmLabels)
+        getLabels = New List(Of tmLabels)
+        Dim jsoN$ = getAPIData("/api/labels?isSystem=" + LCase(CStr(isSystem))) 'true") '?isSystem=false")
+
+        getLabels = JsonConvert.DeserializeObject(Of List(Of tmLabels))(jsoN)
+    End Function
+
     Public Function getProjectsOfGroup(G As tmGroups) As List(Of tmProjInfo)
         getProjectsOfGroup = New List(Of tmProjInfo)
 
@@ -109,25 +116,25 @@ Public Class TM_Client
 
 
 
-    Public Function loadAllGroups(ByRef T As TM_Client) As List(Of tmGroups)
+    Public Function loadAllGroups(ByRef T As TM_Client, Optional ByVal louD As Boolean = False) As List(Of tmGroups)
 
         Dim GRP As List(Of tmGroups) = T.getGroups
 
         For Each G In GRP
             G.AllProjInfo = T.getProjectsOfGroup(G)
-            Console.WriteLine(G.Name + ": " + G.AllProjInfo.Count.ToString + " models")
+            If louD Then Console.WriteLine(G.Name + ": " + G.AllProjInfo.Count.ToString + " models")
             For Each P In G.AllProjInfo
                 P.Model = T.getProject(P.Id)
-                Console.WriteLine(vbCrLf)
-                Console.WriteLine(col5CLI("Proj/Comp Name", "#/TYPE COMP", "# THR", "# SR"))
-                Console.WriteLine(col5CLI("--------------", "-----------", "-----", "----"))
+                If louD Then Console.WriteLine(vbCrLf)
+                If louD Then Console.WriteLine(col5CLI("Proj/Comp Name", "#/TYPE COMP", "# THR", "# SR"))
+                If louD Then Console.WriteLine(col5CLI("--------------", "-----------", "-----", "----"))
                 With P.Model
                     T.addThreats(P.Model, P.Id) 'add in details of threats not inside Diagram API (eg Protocols)
-                    Console.WriteLine(col5CLI(P.Name + " [Id " + P.Id.ToString + "]", .Nodes.Count.ToString, P.Model.modelNumThreats.ToString, P.Model.modelNumThreats(True).ToString))
+                    If louD Then Console.WriteLine(col5CLI(P.Name + " [Id " + P.Id.ToString + "]", .Nodes.Count.ToString, P.Model.modelNumThreats.ToString, P.Model.modelNumThreats(True).ToString))
                     '     Console.WriteLine(col5CLI("   ", "TYPE", "# THR", "# SR"))
                     For Each N In .Nodes
                         If N.category = "Collection" Then
-                            Console.WriteLine(col5CLI(" >" + N.FullName, "Collection", "", ""))
+                            If louD Then Console.WriteLine(col5CLI(" >" + N.FullName, "Collection", "", ""))
                             GoTo doneHere
                         End If
                         If N.category = "Project" Then
@@ -136,15 +143,17 @@ Public Class TM_Client
                             '                            Console.WriteLine(col5CLI(" >" + N.FullName, "Nested Model", "", ""))
                             'GoTo doneHere
                         End If
-                        Console.WriteLine(col5CLI(" >" + N.ComponentName, N.ComponentTypeName, N.listThreats.Count.ToString, N.listSecurityRequirements.Count.ToString))
+                        If louD Then Console.WriteLine(col5CLI(" >" + N.ComponentName, N.ComponentTypeName, N.listThreats.Count.ToString, N.listSecurityRequirements.Count.ToString))
                         '                        Console.WriteLine("------------- " + N.Name + "-Threats:" + N.listThreats.Count.ToString + "-SecRqrmnts:" + N.listSecurityRequirements.Count.ToString)
 doneHere:
                     Next
                 End With
-                If P.Model.Nodes.Count Then Console.WriteLine(col5CLI("----------------------------------", "------------------------", "------", "------"))
+                If P.Model.Nodes.Count Then
+                    If louD Then Console.WriteLine(col5CLI("----------------------------------", "------------------------", "------", "------"))
+                End If
             Next
 
-            Console.WriteLine(vbCrLf)
+            If louD Then Console.WriteLine(vbCrLf)
         Next
 
         Return GRP
@@ -263,6 +272,14 @@ Public Class tmGroups
         Public GroupUsers$
         Public AllProjInfo As List(Of tmProjInfo)
     End Class
+
+Public Class tmLabels
+    Public Id As Long
+    Public Name$
+    Public IsSystem As Boolean
+    Public Attributes$
+End Class
+
 Public Class tmProjInfo
     Public Id As Long
     Public Name$
@@ -365,6 +382,7 @@ Public Class tmNodeData
         Public listSecurityRequirements As List(Of tmProjSecReq)
     Public ComponentTypeName$
     Public ComponentName$
+    Public Notes$
     Public Id As Long
     Public threatCount As Integer
 

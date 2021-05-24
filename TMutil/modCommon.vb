@@ -91,8 +91,10 @@ Module modCommon
 
         For Each A In theArgs
             argNum += 1
-            If LCase(A) = LCase(lookForArg) Then
+            'Console.WriteLine(A)
+            If LCase(A) = LCase("--" + lookForArg) Then
                 If argNum + 1 > theArgs.Count Then Return ""
+                'Console.WriteLine("foundit")
                 Return theArgs(argNum)
             End If
         Next
