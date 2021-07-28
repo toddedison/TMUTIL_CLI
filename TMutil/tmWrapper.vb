@@ -96,6 +96,34 @@ Public Class TM_Client
         getGroups = JsonConvert.DeserializeObject(Of List(Of tmGroups))(jsoN)
 
     End Function
+    Public Function getAWSaccounts() As List(Of tmAWSacc)
+        getAWSaccounts = New List(Of tmAWSacc)
+        Dim jsoN$ = getAPIData("/api/thirdparty/list/AWS")
+        getAWSaccounts = JsonConvert.DeserializeObject(Of List(Of tmAWSacc))(jsoN)
+
+    End Function
+    Public Function getVPCs(awsID As Long) As List(Of tmVPC)
+        On Error GoTo errorcatch
+
+        getVPCs = New List(Of tmVPC)
+        Dim jsoN$ = getAPIData("/api/thirdparty/account/" + awsID.ToString + "/AWS")
+        Dim O As JObject = JObject.Parse(jsoN)
+        jsoN = O.SelectToken("VPCs").ToString
+        getVPCs = JsonConvert.DeserializeObject(Of List(Of tmVPC))(jsoN)
+
+errorcatch:
+        'empty JSON returns empty list
+    End Function
+
+
+    Public Function getAllProjects() As List(Of tmProjInfo)
+        getAllProjects = New List(Of tmProjInfo)
+        Dim jsoN$ = getAPIData("/api/projects/GetAllProjects")
+
+        getAllProjects = JsonConvert.DeserializeObject(Of List(Of tmProjInfo))(jsoN)
+
+    End Function
+
 
     Public Function getLabels(Optional ByVal isSystem As Boolean = False) As List(Of tmLabels)
         getLabels = New List(Of tmLabels)
@@ -114,7 +142,17 @@ Public Class TM_Client
         getProjectsOfGroup = JsonConvert.DeserializeObject(Of List(Of tmProjInfo))(jsoN)
     End Function
 
+    Public Function prepVPCmodel(G As tmVPC) As String
+        prepVPCmodel = ""
 
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(G)
+        Return "[" + jBody + "]"
+    End Function
+
+    Public Async Sub createVPCmodel(G As tmVPC)
+        Call getAPIData("/api/thirdparty/createthreatmodelfromvpc", True, prepVPCmodel(G))
+    End Sub
 
     Public Function loadAllGroups(ByRef T As TM_Client, Optional ByVal louD As Boolean = False) As List(Of tmGroups)
 
@@ -215,6 +253,20 @@ skipThose:
         'getGroups = JsonConvert.DeserializeObject(Of List(Of tmGroups))(jsoN)
     End Sub
 
+    Public Function ndxVPC(ByVal vpcID As Long, ByRef VPCs As List(Of tmVPC)) As Integer
+        'finds object (for now, the node of a model) matching idOFnode
+        Dim K As Long = 0
+
+        For Each N In VPCs
+            If N.Id = vpcID Then
+                Return K
+            End If
+            K += 1
+        Next
+
+        Return -1
+    End Function
+
     Public Sub addNode(ByRef tmMOD As tmModel, ByRef T As tmTThreat)
         ' create node inside tmMOD based on threat T (from Threats API)
         'Dim tmMOD As tmModel = tmPROJ.Model
@@ -259,6 +311,31 @@ skipThose:
 
 End Class
 
+Public Class tmAWSacc
+    Public Id As Long
+    Public Name$
+
+End Class
+Public Class tmVPC
+    Public Id As Long
+    Public VPCId$
+    Public ThirdpartyInfoId As Long
+    Public ProjectId? As Integer
+    Public ProjectName$
+    Public Version$
+    Public VPCTags$
+    Public IsSuccess As Boolean
+    Public Notes$
+    Public Labels$
+    Public RiskId As Integer
+    Public IsInternal As Boolean
+    Public LastSync$
+    Public Region$
+    Public GroupPermissions() As String
+    Public UserPermissions() As String
+    Public [Type] As String
+
+End Class
 Public Class tmGroups
         Public Id As Long
         Public Name$
@@ -287,6 +364,9 @@ Public Class tmProjInfo
     'Public Guid As System.Guid
     Public isInternal As Boolean
     Public RiskId As Integer
+    Public RiskName$
+    Public CreatedByName$
+    Public LastModifiedByName$
     'Public RiskName As Integer
     Public [Type] As String
     Public CreatedByUserEmail$
@@ -393,6 +473,19 @@ Public Class tmNodeData
     End Sub
 End Class
 
+Public Class TF_Threat
+    '    {\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"SampleThreat444444\",\"Labels\":\"AppSec and InfraSec,DevOps\",\"LibrayId\":66,\"Description\":\"<p>Example123</p>\",\"IsCopy\":false}
+    Public ImagePath$
+    Public ComponentTypeId As Integer
+    Public RiskId As Integer
+    Public CodeTypeId As Integer
+    Public DataClassificationId As Integer
+    Public Name$
+    Public Labels$
+    Public LibrayId As Integer
+    Public Description$
+    Public IsCopy As Boolean
+End Class
 Public Class tmModel
     ' model is built from DIAGRAM API
     ' includes all threats and SRs except
