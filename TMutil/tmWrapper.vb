@@ -150,7 +150,10 @@ errorcatch:
         Return "[" + jBody + "]"
     End Function
 
-    Public Async Sub createVPCmodel(G As tmVPC)
+    Public Sub createVPCmodel(G As tmVPC)
+        On Error Resume Next
+        'this command times out - should be async
+
         Call getAPIData("/api/thirdparty/createthreatmodelfromvpc", True, prepVPCmodel(G))
     End Sub
 
@@ -331,9 +334,10 @@ Public Class tmVPC
     Public IsInternal As Boolean
     Public LastSync$
     Public Region$
-    Public GroupPermissions() As String
-    Public UserPermissions() As String
+    Public GroupPermissions As List(Of String)
+    Public UserPermissions As List(Of String)
     Public [Type] As String
+
 
 End Class
 Public Class tmGroups

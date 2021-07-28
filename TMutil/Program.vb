@@ -132,7 +132,8 @@ Module Program
                         .ProjectName = .VPCId
                         .Type = "AWSCloudApplication"
                         .Labels = "AWS"
-
+                        .GroupPermissions = New List(Of String)
+                        .UserPermissions = New List(Of String)
                     End With
 
                     Console.WriteLine("Sending command to create threat model from:" + vbCrLf + T.prepVPCmodel(vpcS(ndX)))
@@ -162,8 +163,8 @@ nextOne:
                 For Each V In vpcS
                     Dim vVers$
                     Dim vLast$
-                    Dim vDriftVPC$
-                    Dim vDriftTM$
+                    Dim vDriftVPC$ = ""
+                    Dim vDriftTM$ = ""
                     If IsNothing(V.Notes) = False Then
                         If InStr(V.Notes, "Following Nodes are available in AWS VPC") Then vDriftVPC = "TRUE" Else vDriftVPC = "FALSE"
                         If InStr(V.Notes, "Following Nodes are available in Threat Model") Then vDriftTM = "TRUE" Else vDriftTM = "FALSE"
@@ -270,6 +271,11 @@ nextOne:
         Console.WriteLine(fLine("get_projects", "Returns groups"))
         Console.WriteLine(fLine("get_labels", "Returns labels, arg: --ISSYSTEM (True/False)"))
         Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
+
+        Console.WriteLine(fLine("show_aws_iam", "Show all available AWS IAM accounts"))
+        Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
+        Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
+
     End Sub
 
 End Module
