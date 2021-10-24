@@ -17,6 +17,17 @@ Public Class TM_Client
     Public isConnected As Boolean
     Private slToken$
 
+    Public lib_Comps As List(Of tmComponent)
+    Public lib_TH As List(Of tmProjThreat)
+    Public lib_SR As List(Of tmProjSecReq)
+    Public lib_AT As List(Of tmAttribute)
+
+    Public sysLabels As List(Of tmLabels)
+    Public labelS As List(Of tmLabels)
+    Public groupS As List(Of tmGroups)
+    Public librarieS As List(Of tmLibrary)
+
+
     Public Sub New(fqdN$, uN$, pw$)
 
         tmFQDN = fqdN
@@ -25,6 +36,7 @@ Public Class TM_Client
 
         'Console.WriteLine("New TM_Client activated: " + Replace(tmFQDN, "https://", ""))
 
+        Console.WriteLine("Connecting to " + fqdN)
         Dim client = New RestClient(fqdN + "/token")
         Dim request = New RestRequest(Method.POST)
         Dim response As IRestResponse
@@ -39,7 +51,25 @@ Public Class TM_Client
         request.AddParameter("grant_type", "password")
 
         response = client.Execute(request)
-        'Console.WriteLine(response.Content)
+        Console.WriteLine("Login non-SSO method (demo2): " + response.ResponseStatus.ToString + "/ " + response.StatusCode.ToString + "/ Success: " + response.IsSuccessful.ToString)
+
+        If response.IsSuccessful = False Then
+            client = New RestClient(fqdN + "/idsvr/connect/token")
+            request = New RestRequest(Method.POST)
+            request.AddHeader("Content-Type", "application/x-www-form-urlencoded")
+            request.AddHeader("Accept", "application/json")
+
+            request.AddParameter("username", uN)
+            request.AddParameter("password", pw)
+            request.AddParameter("grant_type", "password")
+            request.AddParameter("client_id", "demo-resource-owner")
+            request.AddParameter("client_secret", "geheim")
+            request.AddParameter("scope", "openid profile email api")
+
+            response = client.Execute(request)
+            Console.WriteLine("Login SSO method (/idsvr/connect): " + response.ResponseStatus.ToString + "/ " + response.StatusCode.ToString + "/ Success: " + response.IsSuccessful.ToString)
+
+        End If
 
         If response.IsSuccessful = True Then
             Me.isConnected = True
@@ -74,6 +104,9 @@ Public Class TM_Client
         If Len(addJSONbody) Then
             request.AddHeader("Content-Type", "application/json")
             request.AddHeader("Accept-Encoding", "gzip, deflate, br")
+
+            request.AddHeader("Accept-Language", "zh")
+
             request.AddHeader("Connection", "keep-alive")
             request.AddParameter("application/json", addJSONbody, ParameterType.RequestBody)
         End If
@@ -82,6 +115,12 @@ Public Class TM_Client
 
         Dim O As JObject = JObject.Parse(response.Content)
 
+        If IsNothing(O.SelectToken("IsSuccess")) = True Then
+            Console.WriteLine("API Request Rejected: " + urI)
+            getAPIData = ""
+            Exit Function
+        End If
+
         If CBool(O.SelectToken("IsSuccess")) = False Then
             getAPIData = "ERROR:Could not retrieve " + urI
             Exit Function
@@ -89,6 +128,21 @@ Public Class TM_Client
 
         Return O.SelectToken("Data").ToString
     End Function
+
+    Public Function getLibraries() As List(Of tmLibrary)
+        getLibraries = New List(Of tmLibrary)
+        Dim jsoN$ = getAPIData("/api/libraries")
+
+        If jsoN = "" Then
+            Return getLibraries 'returning an empty object
+            Exit Function
+        End If
+
+        getLibraries = JsonConvert.DeserializeObject(Of List(Of tmLibrary))(jsoN)
+
+    End Function
+
+
     Public Function getGroups() As List(Of tmGroups)
         getGroups = New List(Of tmGroups)
         Dim jsoN$ = getAPIData("/api/groups")
@@ -118,7 +172,15 @@ errorcatch:
 
     Public Function getAllProjects() As List(Of tmProjInfo)
         getAllProjects = New List(Of tmProjInfo)
-        Dim jsoN$ = getAPIData("/api/projects/GetAllProjects")
+        '        Dim jsoN$ = getAPIData("/api/projects/GetAllProjects")
+        Dim c$ = Chr(34)
+        Dim bodY$ = "{" + c + "virtualGridStateRequestModel" + c + ":{" + c + "state" + c + ":{" + c + "skip" + c + ":0," + c + "take" + c + ":100}}," + c + "projectFilterModel" + c + ":{" + c + "ActiveProjects" + c + ":true}}"
+
+        Dim jsoN$ = getAPIData("/api/projects/smartfilter", True, bodY)
+
+        Dim O As JObject = JObject.Parse(jsoN)
+        jsoN = O.SelectToken("Data").ToString
+
 
         getAllProjects = JsonConvert.DeserializeObject(Of List(Of tmProjInfo))(jsoN)
 
@@ -156,6 +218,456 @@ errorcatch:
 
         Call getAPIData("/api/thirdparty/createthreatmodelfromvpc", True, prepVPCmodel(G))
     End Sub
+
+
+    Public Function getTFComponents(T As tfRequest) As List(Of tmComponent)
+        getTFComponents = New List(Of tmComponent)
+
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(T)
+
+        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+
+        getTFComponents = JsonConvert.DeserializeObject(Of List(Of tmComponent))(jsoN)
+    End Function
+
+
+    Public Function getTFSecReqs(T As tfRequest) As List(Of tmProjSecReq)
+        getTFSecReqs = New List(Of tmProjSecReq)
+
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(T)
+
+        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+
+        getTFSecReqs = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(jsoN)
+    End Function
+
+
+    Public Function getTFThreats(T As tfRequest) As List(Of tmProjThreat)
+        Dim TF As New List(Of tmProjThreat)
+
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(T)
+
+        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+
+        TF = JsonConvert.DeserializeObject(Of List(Of tmProjThreat))(jsoN)
+
+        Return TF
+    End Function
+
+    Public Function getTFAttr(T As tfRequest) As List(Of tmAttribute)
+        Dim TF As New List(Of tmAttribute)
+
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(T)
+
+        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+
+        'Console.WriteLine(jsoN)
+
+        TF = JsonConvert.DeserializeObject(Of List(Of tmAttribute))(jsoN)
+
+        Return TF
+
+        '        Dim nD As JObject = JObject.Parse(jsoN)
+        '        Dim nodeJSON$ = nD.SelectToken("Model").ToString
+        '
+        ''       Dim nodeS As List(Of tmNodeData)
+        '       nodeJSON = cleanJSON(nodeJSON)
+        '        nodeJSON = cleanJSONright(nodeJSON)
+        '
+        '        Dim SS As New JsonSerializerSettings
+        '        SS.NullValueHandling = NullValueHandling.Ignore
+        '
+        '        nodeS = JsonConvert.DeserializeObject(Of List(Of tmNodeData))(nodeJSON, SS)
+        '
+        ' getProject = JsonConvert.DeserializeObject(Of tmModel)(jsoN)
+        ' getProject.Nodes = nodeS
+
+
+    End Function
+
+    Public Sub buildCompObj(ByVal C As tmComponent) ' As tmComponent 'C As tmComponent, ByRef TH As List(Of tmProjThreat), ByRef SR As List(Of tmProjSecReq)) As tmComponent
+        ' Assumes you are passing completed lists of TH and SR using methods above (/api/framework)
+        ' This func uses an API QUERY to identify attached TH/DirectSR but only ID and NAME is returned
+        ' Full list used to "attach" more complete TH/SR from lists passed ByRef
+        ' Will query for Transitive SRs
+        ' Recommend multi-threading this func
+        ' Multi-threading full pull of SRs attached to Threats might be overkill, especially if they arent used :)
+
+        Dim cResp As New tmCompQueryResp
+
+        Dim jBody$ = ""
+        Dim modeL$ = JsonConvert.SerializeObject(C) 'submits serialized model with escaped quotes
+
+        Dim cReq As New tmTFQueryRequest
+        With cReq
+            .Model = modeL
+            .LibraryId = C.LibraryId
+            .EntityType = "Components"
+        End With
+
+        jBody = JsonConvert.SerializeObject(cReq)
+
+        Dim json$ = getAPIData("/api/threatframework/query", True, jBody)
+
+        'cResp = JsonConvert.DeserializeObject(Of tmCompQueryResp)(json)
+        'would have been nice if this had worked.. cresp is a class made up of 3 lists
+        'instead have to break up json/sloppy
+        Dim thStr$ = Mid(json, 2, InStr(json, "],") - 1)
+        json = Mid(json, InStr(json, "],") + 1)
+        Dim srStr$ = Mid(json, InStr(json, ",") + 1, InStr(json, "]") - 1)
+        json = Mid(json, InStr(json, "],") + 1)
+        Dim attStr$ = Mid(json, InStr(json, ",") + 1, InStr(json, "]") - 1)
+
+        Dim ndX As Integer
+
+        With cResp
+            .listThreats = JsonConvert.DeserializeObject(Of List(Of tmProjThreat))(thStr)
+            .listDirectSRs = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(srStr)
+            If Len(attStr) > 3 Then
+                .listAttr = JsonConvert.DeserializeObject(Of List(Of tmAttribute))(attStr)
+                ' If .listAttr.Count > 1 Then
+                ' saveJSONtoFile(attStr, "attrib_" + C.Id + ".json")
+                'End If
+            End If
+            For Each T In .listAttr
+                Dim ndxAT = ndxATTR(T.Id)
+                If ndxAT <> -1 Then C.listAttr.Add(lib_AT(ndxAT))
+            Next
+
+            For Each T In .listThreats
+                ndX = ndxTHlib(T.Id) ', lib_TH)
+                C.listThreats.Add(lib_TH(ndX))
+            Next
+            For Each T In .listDirectSRs
+                ndX = ndxSRlib(T.Id) ', lib_SR)
+                If ndX <> -1 Then C.listDirectSRs.Add(lib_SR(ndX))
+            Next
+
+        End With
+
+
+        If C.ComponentTypeName = "Protocols" Or C.ComponentTypeName = "Security Control" Then GoTo skipForProtocolsAndControls
+
+        Dim possibleTransSRs As New List(Of tmProjSecReq)
+        possibleTransSRs = addTransitiveSRs(C)
+
+        For Each TSR In possibleTransSRs
+            'C.listTransSRs.Add(TSR)
+            If C.numLabels > 0 Then
+                If numMatchingLabels(C.Labels, TSR.Labels) / C.numLabels > 0.9 Then C.listTransSRs.Add(TSR)
+            End If
+        Next
+
+        If possibleTransSRs.Count Then Console.WriteLine("Label matching " + possibleTransSRs.Count.ToString + " down to " + C.listTransSRs.Count.ToString + " SRs")
+
+        'GoTo skipForProtocolsAndControls
+
+        For Each AT In C.listAttr
+            For Each O In AT.Options
+                For Each TH In O.Threats
+                    Dim possibleAttrSRs As New List(Of tmProjSecReq)
+                    possibleAttrSRs = addTransitiveSRsOFattr(C, O)
+
+                    Dim ndxT As Integer = ndxTHlib(TH.Id)
+
+                    If ndxT <> -1 Then
+                        For Each TSR In lib_TH(ndxT).listLinkedSRs
+                            'C.listTransSRs.Add(TSR)
+                            Dim ndxS As Integer = ndxSRlib(TSR)
+
+                            If C.numLabels > 0 Then
+                                If numMatchingLabels(C.Labels, lib_SR(ndxS).Labels) / C.numLabels > 0.9 Then TH.listLinkedSRs.Add(TSR)
+                            End If
+                        Next
+                    End If
+
+                    '                    If possibleAttrSRs.Count Then Console.WriteLine("Label matching " + possibleAttrSRs.Count.ToString + " down to " + TH.listLinkedSRs.Count.ToString + " SRs")
+                Next
+            Next
+            Next
+
+
+skipForProtocolsAndControls:
+
+        C.isBuilt = True
+
+    End Sub
+
+    Private Function addTransitiveSRs(ByVal C As tmComponent) As List(Of tmProjSecReq)
+        addTransitiveSRs = New List(Of tmProjSecReq)
+        If C.listThreats.Count = 0 Then Exit Function
+
+        Dim K As Integer
+        Dim L As Integer
+
+        Dim ndX As Integer
+
+        Dim jBody$
+        Dim jSon$
+        Dim tcStr$
+        Dim tsrStr$
+        Dim transSRs As List(Of tmProjSecReq)
+        Dim T As tmProjThreat
+        Dim ndxTH As Integer
+        Dim cReq As tmTFQueryRequest
+        Dim modeL$
+
+        '        Dim pauseVAL As Boolean
+
+        For K = 0 To C.listThreats.Count - 1
+            T = C.listThreats(K)
+            'here we get the transitive SRs
+            ndxTH = ndxTHlib(T.Id) ', lib_TH)
+
+
+            If lib_TH(ndxTH).isBuilt = True Then
+                ' added doevents as this seems to trip// suspect lowlevel probs with isBuilt prop
+                'this seems to happen a lot
+                'if we already know SRs, just add them from coll and skip web request
+                For Each TSRID In lib_TH(ndxTH).listLinkedSRs
+                    If ndxSR(TSRID, addTransitiveSRs) <> -1 Then GoTo duphere
+                    ndX = ndxSRlib(TSRID) ', lib_SR)
+                    If ndX <> -1 Then addTransitiveSRs.Add(lib_SR(ndX))
+duphere:
+                Next
+                GoTo skipTheLoad
+                ' Else
+            End If
+
+            lib_TH(ndxTH).listLinkedSRs = New Collection
+            ' End If
+
+            cReq = New tmTFQueryRequest
+            modeL$ = JsonConvert.SerializeObject(T) 'submits serialized model with escaped quotes
+
+            Console.WriteLine("Compiling details for ThreatID " + T.Id.ToString)
+            With cReq
+                .Model = modeL
+                .LibraryId = T.LibraryId
+                .EntityType = "Threats"
+            End With
+
+            jBody$ = JsonConvert.SerializeObject(cReq)
+            jSon$ = getAPIData("/api/threatframework/query", True, jBody)
+            ' should come back with TESTCASES,SECREQ lists
+
+            tcStr$ = Mid(jSon, 2, InStr(jSon, "],") - 1) 'test cases here if you want 'em
+            jSon = Mid(jSon, InStr(jSon, "],") + 1)
+            tsrStr$ = Mid(jSon, InStr(jSon, ",") + 1, InStr(jSon, "]") - 1)
+
+            transSRs = New List(Of tmProjSecReq)
+            transSRs = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(tsrStr)
+
+            With lib_TH(ndxTH).listLinkedSRs
+                For L = 0 To transSRs.Count - 1
+                    Dim TSR As tmProjSecReq = transSRs(L)
+                    .Add(TSR.Id)
+
+                    If ndxSR(TSR.Id, addTransitiveSRs) <> -1 Then GoTo duplicate
+                    ndX = ndxSRlib(TSR.Id) ', lib_SR)
+                    If ndX <> -1 Then addTransitiveSRs.Add(lib_SR(ndX))
+duplicate:
+                Next
+            End With
+skipTheLoad:
+            lib_TH(ndxTH).isBuilt = True
+
+        Next
+
+
+    End Function
+
+    Private Function addTransitiveSRsOFattr(ByVal C As tmComponent, ByRef O As tmOptions) As List(Of tmProjSecReq)
+        addTransitiveSRsOFattr = New List(Of tmProjSecReq)
+        If O.Threats.Count = 0 Then Exit Function
+
+        Dim K As Integer
+        Dim L As Integer
+
+        Dim ndX As Integer
+
+        Dim jBody$
+        Dim jSon$
+        Dim tcStr$
+        Dim tsrStr$
+        Dim transSRs As List(Of tmProjSecReq)
+        Dim T As tmProjThreat
+        Dim ndxTH As Integer
+        Dim cReq As tmTFQueryRequest
+        Dim modeL$
+
+        '        Dim pauseVAL As Boolean
+
+
+
+        For K = 0 To O.Threats.Count - 1
+            T = O.Threats(K)
+            'here we get the transitive SRs
+            ndxTH = ndxTHlib(T.Id) ', lib_TH)
+
+
+                    If lib_TH(ndxTH).isBuilt = True Then
+                        ' added doevents as this seems to trip// suspect lowlevel probs with isBuilt prop
+                        'this seems to happen a lot
+                        'if we already know SRs, just add them from coll and skip web request
+                        For Each TSRID In lib_TH(ndxTH).listLinkedSRs
+                            If ndxSR(TSRID, addTransitiveSRsOFattr) <> -1 Then GoTo duphere
+                            ndX = ndxSRlib(TSRID) ', lib_SR)
+                    If ndX <> -1 Then addTransitiveSRsOFattr.Add(lib_sr(ndx))
+duphere:
+                        Next
+                        GoTo skipTheLoad
+                        ' Else
+                    End If
+
+                    lib_TH(ndxTH).listLinkedSRs = New Collection
+                    ' End If
+
+                    cReq = New tmTFQueryRequest
+                    modeL$ = JsonConvert.SerializeObject(T) 'submits serialized model with escaped quotes
+
+            Console.WriteLine("Compiling details for Attribute " + O.Name + " Threat " + T.Id.ToString)
+            With cReq
+                        .Model = modeL
+                        .LibraryId = T.LibraryId
+                        .EntityType = "Threats"
+                    End With
+
+                    jBody$ = JsonConvert.SerializeObject(cReq)
+                    jSon$ = getAPIData("/api/threatframework/query", True, jBody)
+                    ' should come back with TESTCASES,SECREQ lists
+
+                    tcStr$ = Mid(jSon, 2, InStr(jSon, "],") - 1) 'test cases here if you want 'em
+                    jSon = Mid(jSon, InStr(jSon, "],") + 1)
+                    tsrStr$ = Mid(jSon, InStr(jSon, ",") + 1, InStr(jSon, "]") - 1)
+
+                    transSRs = New List(Of tmProjSecReq)
+                    transSRs = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(tsrStr)
+
+                    With lib_TH(ndxTH).listLinkedSRs
+                        For L = 0 To transSRs.Count - 1
+                            Dim TSR As tmProjSecReq = transSRs(L)
+                            .Add(TSR.Id)
+
+                            If ndxSR(TSR.Id, addTransitiveSRsOFattr) <> -1 Then GoTo duplicate
+                    'ndX = ndxSRlib(TSR.Id) ', lib_SR)
+                    addTransitiveSRsOFattr.Add(TSR)
+duplicate:
+                        Next
+                    End With
+skipTheLoad:
+                    lib_TH(ndxTH).isBuilt = True
+
+                Next
+
+
+
+    End Function
+
+    Public Sub defineTransSRs(ByVal threatID As Long)
+        Dim jBody$
+        Dim jSon$
+        Dim tcStr$
+        Dim tsrStr$
+        Dim transSRs As List(Of tmProjSecReq)
+        Dim T As tmProjThreat
+        Dim ndxTH As Integer
+        Dim cReq As tmTFQueryRequest
+        Dim modeL$
+
+        '        Dim pauseVAL As Boolean
+
+        'here we get the transitive SRs
+        ndxTH = ndxTHlib(threatID)
+        T = lib_TH(ndxTH)
+
+        cReq = New tmTFQueryRequest
+        modeL$ = JsonConvert.SerializeObject(T) 'submits serialized model with escaped quotes
+
+        With cReq
+            .Model = modeL
+            .LibraryId = T.LibraryId
+            .EntityType = "Threats"
+        End With
+
+        jBody$ = JsonConvert.SerializeObject(cReq)
+        jSon$ = getAPIData("/api/threatframework/query", True, jBody)
+        ' should come back with TESTCASES,SECREQ lists
+
+        tcStr$ = Mid(jSon, 2, InStr(jSon, "],") - 1) 'test cases here if you want 'em
+        jSon = Mid(jSon, InStr(jSon, "],") + 1)
+        tsrStr$ = Mid(jSon, InStr(jSon, ",") + 1, InStr(jSon, "]") - 1)
+
+        transSRs = New List(Of tmProjSecReq)
+        transSRs = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(tsrStr)
+
+        T.listLinkedSRs = New Collection
+
+        For Each TSR In transSRs
+            If grpNDX(T.listLinkedSRs, TSR.Id) <> -1 Then GoTo duplicate
+            T.listLinkedSRs.Add(TSR.Id)
+duplicate:
+        Next
+skipTheLoad:
+
+        'RaiseEvent threatBuilt(T)
+    End Sub
+
+    Public Function numMatchingLabels(ByVal LofParent$, ByVal LofChild$) As Integer
+        numMatchingLabels = 0
+        Dim PL As New Collection
+        PL = CSVtoCOLL(LofParent)
+        Dim CL As New Collection
+        CL = CSVtoCOLL(LofChild)
+
+        For Each C In CL
+            If grpNDX(PL, C) Then numMatchingLabels += 1
+        Next
+    End Function
+
+    Public Function getMatchingLabels(ByVal LofParent$, ByVal LofChild$, Optional ByVal nonMatching As Boolean = False) As Collection
+        getMatchingLabels = New Collection '  = 0
+        Dim PL As New Collection
+        PL = CSVtoCOLL(LofParent)
+        Dim CL As New Collection
+        CL = CSVtoCOLL(LofChild)
+
+        For Each C In CL
+            If grpNDX(PL, C) Then
+                If nonMatching = False Then getMatchingLabels.Add(C)
+            End If
+        Next
+
+        If nonMatching = True Then
+            Dim unSelected As New Collection
+            For Each PLBL In PL
+                If grpNDX(getMatchingLabels, PLBL) = 0 Then
+                    unSelected.Add(PLBL)
+                End If
+            Next
+            Return unSelected
+        End If
+
+    End Function
+
+    Public Class tmTFQueryRequest
+        Public Model$
+        Public LibraryId As Integer
+        Public EntityType$
+    End Class
+    Public Function returnSRLZcomponent(C As tmComponent) As String
+        Return JsonConvert.SerializeObject(C).ToString
+
+    End Function
+
+
+
+
+
 
     Public Function loadAllGroups(ByRef T As TM_Client, Optional ByVal louD As Boolean = False) As List(Of tmGroups)
 
@@ -270,6 +782,127 @@ skipThose:
         Return -1
     End Function
 
+    Public Function ndxATTR(ID As Long) As Integer
+        ndxATTR = -1
+
+        Dim ndX As Integer = 0
+        For Each P In lib_AT
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+
+    Public Function ndxTHlib(ID As Long) As Integer
+        ndxTHlib = -1
+
+        Dim ndX As Integer = 0
+        For Each P In lib_TH
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxSRlib(ID As Long) As Integer
+        ndxSRlib = -1
+
+        Dim ndX As Integer = 0
+        For Each P In lib_SR
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+
+    Public Function ndxLib(ID As Long) As Integer
+        ndxLib = -1
+
+        Dim ndX As Integer = 0
+        For Each P In librarieS
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+    Public Function ndxComp(ID As Long) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+        ndxComp = -1
+
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        Dim ndX As Integer = 0
+        For Each P In lib_Comps
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxCompbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+        ndxCompbyName = -1
+
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        Dim ndX As Integer = 0
+        For Each P In lib_Comps
+            If LCase(P.Name) = LCase(name) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxSRbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+        ndxSRbyName = -1
+
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        Dim ndX As Integer = 0
+        For Each P In lib_SR
+            If LCase(P.Name) = LCase(name) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxSR(ID As Long, ByRef alL As List(Of tmProjSecReq)) As Integer
+        ndxSR = -1
+
+        Dim ndX As Integer = 0
+        For Each P In alL
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+
+
     Public Sub addNode(ByRef tmMOD As tmModel, ByRef T As tmTThreat)
         ' create node inside tmMOD based on threat T (from Threats API)
         'Dim tmMOD As tmModel = tmPROJ.Model
@@ -312,6 +945,15 @@ skipThose:
         getProject.Nodes = nodeS
     End Function
 
+End Class
+
+Public Class tfRequest
+    'obj used to request Threats, SRs, Components
+    'unpublished API
+    '    "EntityType""SecurityRequirements","LibraryId":"0","ShowHidden":false
+    Public EntityType$
+    Public LibraryId As Integer '0 = ALL
+    Public ShowHidden As Boolean
 End Class
 
 Public Class tmAWSacc
@@ -404,7 +1046,29 @@ Public Class tmProjThreat
     'public Version$ 
     Public IsSystemDepartment As Boolean
 
+    Public isBuilt As Boolean
+    Public listLinkedSRs As Collection
+
+    Public ReadOnly Property ThrID
+        Get
+            Return Id
+        End Get
+    End Property
+    Public ReadOnly Property ThrName
+        Get
+            Return Name
+        End Get
+    End Property
+    Public ReadOnly Property ThRisk
+        Get
+            Return RiskName
+        End Get
+    End Property
+    Public Sub New()
+        listLinkedSRs = New Collection
+    End Sub
 End Class
+
 Public Class tmTThreat
     Public Id As Long
 
@@ -418,6 +1082,141 @@ Public Class tmTThreat
     Public Notes$
     Public SourceId As Long
     Public SourceType$
+
+End Class
+Public Class tmLibrary
+    Public Id As Long
+    Public Name$
+    Public Description$
+    Public CompanyId As Integer
+    Public Guid As System.Guid
+    Public SharingType$
+    Public [Readonly] As Boolean
+    Public isDefault As Boolean
+    Public DateCreated$
+    Public LastUpdated$
+    Public DepartmentId As Integer
+    Public DepartmentName$
+    Public Labels$
+    Public Version$
+    Public IsSystemDepartment As Boolean
+
+End Class
+Public Class tmCompQueryResp
+    Public listThreats As List(Of tmProjThreat)
+    Public listDirectSRs As List(Of tmProjSecReq)
+    'Public listTransSRs As List(Of tmProjSecReq)
+    Public listAttr As List(Of tmAttribute)
+End Class
+Public Class tmAttribute
+    Public Id As Long
+    Public Name$
+    Public LibraryId As Integer
+    Public Options() As tmOptions ' As List(Of tmOptions)
+
+    Public Sub New()
+        '        Options = New List(Of tmOptions)
+    End Sub
+    '    "Id" 1671,
+    '    "Guid": "88404d54-fe0a-4a43-a2f8-a0238de44f4e",
+    '    "Name": "Are there inputs with potential alternate encoding that could bypass input sanitization?",
+    '    "Labels": null,
+    '    "Description": "",
+    '    "LibraryId": 66,
+    '    "isSelected": false,
+    '    "IsHidden": false,
+    '    "IsOptional": true,
+    '    "AttributeType": "SingleSelect",
+    '    "PropertyTypeId": 0,
+    '    "AttributeAnswer": null,
+    '    "Options": [
+    '      {
+    '        "Id": 1827,
+    '        "Name": "Yes",
+    '        "IsDefault": false,
+    '        "Threats": [
+    '          {
+    '            "Id": 343,
+    '            "Guid": null,
+    '            "Name": "Using Slashes and URL Encoding Combined to Bypass Validation Logic",
+    '            "Description": null,
+
+End Class
+Public Class tmOptions
+    Public Id As Integer
+    Public Name$
+    Public isDefault As Boolean
+    Public Threats() As tmProjThreat
+
+    Public Sub New()
+        '        Threats = New List(Of tmProjThreat)
+    End Sub
+End Class
+Public Class tmComponent
+    Public Id As Long
+    Public Name$
+    Public Description$
+    Public ImagePath$
+    Public Labels$
+    Public Version$
+    Public LibraryId As Integer
+    Public ComponentTypeId As Integer
+    Public ComponentTypeName$
+    Public Color$
+    Public Guid As System.Guid
+    Public IsHidden As Boolean
+    Public DiagralElementId As Integer
+    Public ResourceTypeValue$
+    'Public Attributes$
+
+    Public listThreats As List(Of tmProjThreat)
+    Public listDirectSRs As List(Of tmProjSecReq)
+    Public listTransSRs As List(Of tmProjSecReq)
+    Public listAttr As List(Of tmAttribute)
+    Public isBuilt As Boolean
+    Public Function numLabels() As Integer
+        If Len(Labels) = 0 Then
+            Return 0
+        Else
+            Return numCHR(Labels, ",") + 1
+        End If
+    End Function
+
+    Public ReadOnly Property CompID() As Long
+        Get
+            Return Id
+        End Get
+    End Property
+    Public ReadOnly Property CompName() As String
+        Get
+            Return Name
+        End Get
+    End Property
+    Public ReadOnly Property TypeName() As String
+        Get
+            Return ComponentTypeName
+        End Get
+    End Property
+    Public ReadOnly Property NumTH() As Integer
+        Get
+            Return listThreats.Count
+        End Get
+    End Property
+
+    Public ReadOnly Property NumSR() As Integer
+        Get
+            Return listDirectSRs.Count + listTransSRs.Count
+        End Get
+    End Property
+
+
+    Public Sub New()
+        listThreats = New List(Of tmProjThreat)
+        listDirectSRs = New List(Of tmProjSecReq)
+        listTransSRs = New List(Of tmProjSecReq)
+        listAttr = New List(Of tmAttribute)
+        isBuilt = False
+    End Sub
 
 End Class
 

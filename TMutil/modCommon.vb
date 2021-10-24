@@ -20,14 +20,14 @@ Module modCommon
     End Function
 
 
-    Public Sub addLoginCreds(ByRef AA As TM_Client, uN$, pW$)
+    Public Sub addLoginCreds(fqdN$, uN$, pW$)
         Dim S3 As New Simple3Des("7w6e87twryut24876wuyeg")
 
         ' if exists, don't add
         Dim LL As Collection
         LL = getLogins()
 
-        If grpNDX(LL, AA.tmFQDN + "|" + S3.Encode(uN) + "|" + S3.encode(pW)) Then Exit Sub
+        If grpNDX(LL, fqdN + "|" + S3.Encode(uN) + "|" + S3.Encode(pW)) Then Exit Sub
 
         Dim FF As Integer
         FF = FreeFile()
@@ -38,8 +38,9 @@ Module modCommon
         sKeyU = S3.Encode(sKeyU)
         sKeyP = S3.Encode(sKeyP)
 
+        ' safeKILL("logins")
         FileOpen(FF, "logins", OpenMode.Append)
-        Print(FF, AA.tmFQDN + "|" + sKeyU + "|" + sKeyP + Chr(13))
+        Print(FF, fqdN + "|" + sKeyU + "|" + sKeyP + Chr(13))
         FileClose(FF)
 
         S3 = Nothing
@@ -267,6 +268,14 @@ dontEvalCase:
 
     End Function
 
+    Public Function numCHR(ByVal cS$, whichCHR$) As Integer
+        numCHR = 0
+        If Len(cS) = 0 Then Exit Function
+        Dim K As Integer
+        For K = 1 To Len(cS)
+            If Mid(cS, K, 1) = whichCHR Then numCHR += 1
+        Next
+    End Function
 
     Public Function CSVtoCOLL(ByRef csV$) As Collection
         CSVtoCOLL = New Collection
