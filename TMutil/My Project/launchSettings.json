@@ -1,7 +1,8 @@
 {
   "profiles": {
     "TMutil": {
-      "commandName": "Project"
+      "commandName": "Project",
+      "commandLineArgs": "get_comp --name democomp --edit true"
     }
   }
 }

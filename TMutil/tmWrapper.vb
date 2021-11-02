@@ -289,6 +289,72 @@ errorcatch:
 
     End Function
 
+    Public Sub removeThreatFromComponent(C As tmComponent, threatID As Integer)
+        '{"propertyIds":[101],"propertyEntityType":"Threats","sourceEntityIds":[449],"LibraryId":1,"EntityType":"Components","IsAddition":false}
+        Dim P As New entityUpdate
+        With P
+            .propertyIds.Add(threatID)
+            .propertyEntityType = "Threats"
+            .sourceEntityIds.Add(C.Id)
+            .LibraryId = C.LibraryId
+            .EntityType = "Components"
+            .IsAddition = False
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/updateproperty", True, jBody)
+
+
+    End Sub
+    Public Sub removeAttributeFromComponent(C As tmComponent, attrID As Integer)
+        '{"propertyIds":[1667],"propertyEntityType":"Attributes","sourceEntityIds":[3301],"LibraryId":66,"EntityType":"Components","IsAddition":false}
+        Dim P As New entityUpdate
+        With P
+            .propertyIds.Add(attrID)
+            .propertyEntityType = "Attributes"
+            .sourceEntityIds.Add(C.Id)
+            .LibraryId = C.LibraryId
+            .EntityType = "Components"
+            .IsAddition = False
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/updateproperty", True, jBody)
+
+    End Sub
+
+    Public Sub addThreatToComponent(C As tmComponent, threatID As Integer)
+        '{"propertyIds":[1503],"propertyEntityType":"Threats","sourceEntityIds":[3301],"LibraryId":66,"EntityType":"Components","IsAddition":true,"BackendId":1}
+        Dim P As New entityUpdateBID
+        With P
+            .propertyIds.Add(threatID)
+            .propertyEntityType = "Threats"
+            .sourceEntityIds.Add(C.Id)
+            .LibraryId = C.LibraryId
+            .EntityType = "Components"
+            .IsAddition = True
+            .BackendId = 1
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/updateproperty", True, jBody)
+
+
+    End Sub
+
+    Public Sub addEditSR(SR As tmProjSecReq)
+        Dim P As New updateEntityObject
+        With P
+            .LibraryId = SR.LibraryId
+            .EntityType = "SecurityRequirements"
+            .Model = JsonConvert.SerializeObject(SR)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+
+    End Sub
+
     Public Sub buildCompObj(ByVal C As tmComponent) ' As tmComponent 'C As tmComponent, ByRef TH As List(Of tmProjThreat), ByRef SR As List(Of tmProjSecReq)) As tmComponent
         ' Assumes you are passing completed lists of TH and SR using methods above (/api/framework)
         ' This func uses an API QUERY to identify attached TH/DirectSR but only ID and NAME is returned
@@ -585,6 +651,8 @@ skipTheLoad:
         ndxTH = ndxTHlib(threatID)
         T = lib_TH(ndxTH)
 
+        Console.WriteLine("Getting SRs of threat")
+
         cReq = New tmTFQueryRequest
         modeL$ = JsonConvert.SerializeObject(T) 'submits serialized model with escaped quotes
 
@@ -608,7 +676,7 @@ skipTheLoad:
         T.listLinkedSRs = New Collection
 
         For Each TSR In transSRs
-            If grpNDX(T.listLinkedSRs, TSR.Id) <> -1 Then GoTo duplicate
+            If grpNDX(T.listLinkedSRs, TSR.Id) <> 0 Then GoTo duplicate
             T.listLinkedSRs.Add(TSR.Id)
 duplicate:
         Next
@@ -653,6 +721,60 @@ skipTheLoad:
         End If
 
     End Function
+
+    Public Function removeLabelFromSR(ByRef SR As tmProjSecReq, label$) As Boolean
+        removeLabelFromSR = False
+
+        Dim PL As New Collection
+        PL = CSVtoCOLL(SR.Labels)
+
+        Dim K As Integer = 0
+        For K = PL.Count To 1 Step -1
+            If LCase(PL(K)) = LCase(label) Then
+                PL.Remove(K)
+                removeLabelFromSR = True
+            End If
+        Next
+
+        Dim lbL$ = ""
+
+        If removeLabelFromSR Then
+            For K = 1 To PL.Count
+                lbL += PL(K) + ","
+            Next
+            lbL = Mid(lbL, 1, Len(lbL) - 1)
+            SR.Labels = lbL
+        End If
+
+    End Function
+
+    Public Function matchLabelsOnSR(ByRef SR As tmProjSecReq, labels$) As Boolean
+        matchLabelsOnSR = False
+
+        Dim Clabels As New Collection
+        Dim SRlabels As New Collection
+        Clabels = CSVtoCOLL(labels)
+        SRlabels = CSVtoCOLL(SR.Labels)
+
+        For Each C In Clabels
+            If grpNDX(SRlabels, C) = 0 Then
+                SRlabels.Add(C)
+            End If
+        Next
+        matchLabelsOnSR = True
+
+        Dim lbL$ = ""
+
+        Dim K As Integer = 0
+
+        For K = 1 To SRlabels.Count
+            lbL += SRlabels(K) + ","
+        Next
+        lbL = Mid(lbL, 1, Len(lbL) - 1)
+        SR.Labels = lbL
+
+    End Function
+
 
     Public Class tmTFQueryRequest
         Public Model$
@@ -947,6 +1069,44 @@ skipThose:
 
 End Class
 
+Public Class entityUpdate
+    '{"propertyIds":[101],"propertyEntityType":"Threats","sourceEntityIds":[449],"LibraryId":1,"EntityType":"Components","IsAddition":false}
+    Public propertyIds As List(Of Integer)
+    Public propertyEntityType$
+    Public sourceEntityIds As List(Of Integer)
+    Public LibraryId As Integer
+    Public EntityType$
+    Public IsAddition As Boolean
+
+    Public Sub New()
+        propertyIds = New List(Of Integer)
+        sourceEntityIds = New List(Of Integer)
+    End Sub
+End Class
+
+Public Class entityUpdateBID
+    '{"propertyIds":[101],"propertyEntityType":"Threats","sourceEntityIds":[449],"LibraryId":1,"EntityType":"Components","IsAddition":false}
+    Public propertyIds As List(Of Integer)
+    Public propertyEntityType$
+    Public sourceEntityIds As List(Of Integer)
+    Public LibraryId As Integer
+    Public EntityType$
+    Public IsAddition As Boolean
+    Public BackendId As Integer
+
+    Public Sub New()
+        propertyIds = New List(Of Integer)
+        sourceEntityIds = New List(Of Integer)
+    End Sub
+End Class
+
+
+Public Class updateEntityObject
+    Public LibraryId As Integer
+    Public EntityType$
+    Public Model$ ' As tmProjSecReq
+
+End Class
 Public Class tfRequest
     'obj used to request Threats, SRs, Components
     'unpublished API
@@ -1230,7 +1390,7 @@ Public Class tmProjSecReq
     Public RiskName$
     Public Labels$
     Public LibraryId As Integer
-    'Public Guid as System.Guid
+    Public Guid? As System.Guid
     Public StatusName$
     Public SourceName$
     Public IsHidden As Boolean

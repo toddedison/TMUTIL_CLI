@@ -102,6 +102,82 @@ Module Program
                 Next
                 End
 
+            Case "get_threats"
+                Dim R As New tfRequest
+
+                With R
+                    .EntityType = "Threats"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+
+                T.lib_TH = T.getTFThreats(R)
+                Console.WriteLine("Loaded threats: " + T.lib_TH.Count.ToString)
+                T.librarieS = T.getLibraries
+                Console.WriteLine("Loaded libraries: " + T.librarieS.Count.ToString)
+
+                Dim srchS$ = argValue("search", args)
+                If Len(srchS) Then srchS = LCase(srchS)
+
+                Dim numItems As Integer = 0
+
+                If Val(argValue("id", args)) = 0 Then
+                    For Each P In T.lib_TH
+                        If Len(srchS) Then
+                            If InStr(LCase(P.Labels), srchS) Then GoTo showTH
+                            If InStr(LCase(P.Name), srchS) Then GoTo showTH
+                            'If InStr(LCase(P.Description), srchS) Then GoTo showTH
+                            GoTo skipTH
+                        End If
+showTH:
+                        Dim libNDX As Integer = T.ndxLib(P.LibraryId)
+                        Dim lName$ = ""
+                        If libNDX <> -1 Then lName$ = T.librarieS(libNDX).Name
+
+                        lName += " [" + P.LibraryId.ToString + "]"
+                        lName += spaces(30 - Len(lName))
+
+                        Dim idSt$ = "[" + P.Id.ToString + "]"
+
+                        Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+                        numItems += 1
+skipTH:
+                    Next
+                    Console.WriteLine("# of items in this list: " + numItems.ToString)
+                    End
+                Else
+                    Dim tNDX As Integer = T.ndxTHlib(Val(argValue("id", args)))
+                    If tNDX = -1 Then
+                        Console.WriteLine("NOT FOUND: Threat ID " + argValue("id", args).ToString)
+                        End
+                    End If
+
+                    R.EntityType = "SecurityRequirements"
+                    T.lib_SR = T.getTFSecReqs(R)
+                    Console.WriteLine("Loaded SRs: " + T.lib_SR.Count.ToString)
+
+                    Call T.defineTransSRs(T.lib_TH(tNDX).Id) '.Id)
+
+                    With T.lib_TH(tNDX)
+                        Console.WriteLine(vbCrLf + "NAME       :" + .Name + spaces(80 - Len(.Name)) + "[" + .Id.ToString + "] # SR: " + .listLinkedSRs.Count.ToString)
+                        Console.WriteLine("LABELS     :" + .Labels)
+                        Console.WriteLine("DESCRIPTION:" + .Description)
+
+                        Console.WriteLine(vbCrLf)
+                        Console.WriteLine("REQUIREMENTS: " + .listLinkedSRs.Count.ToString)
+
+                        For Each S In .listLinkedSRs
+                            Dim sNdx As Integer = T.ndxSRlib(S)
+                            Dim idSt$ = "[" + T.lib_SR(sNdx).Id.ToString + "]"
+
+                            Console.WriteLine(idSt + spaces(10 - Len(idSt)) + T.lib_SR(sNdx).Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+                        Next
+                        Console.WriteLine("==========================")
+
+                    End With
+                End If
+
             Case "get_groups"
                 Dim GG As List(Of tmGroups)
                 GG = T.getGroups()
@@ -210,9 +286,82 @@ nextOne:
                     Console.WriteLine(col5CLI(V.VPCId + " [" + V.Id.ToString + "]", vVers, vDriftVPC, vDriftTM))
                 Next
 
+            Case "addcomp_threat"
+                Dim cID As Integer = Val(argValue("id", args))
+                Dim cNAME = argValue("name", args)
+                Dim thrID As Integer = Val(argValue("threatid", args))
+
+                If cID = 0 And cNAME = "" Then
+                    Console.WriteLine("Must provide either an --ID or --NAME argument to identify component of interest")
+                    End
+                End If
+
+                If thrID = 0 Then
+                    Console.WriteLine("Must provide the --THREATID of the Threat you'd like to add")
+                    End
+                End If
+
+                Dim R As tfRequest
+                R = New tfRequest
+                With R
+                    .EntityType = "Components"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+                T.lib_Comps = T.getTFComponents(R)
+
+                Dim ndxC As Integer
+
+                Dim C As tmComponent
+
+                If cID Then
+                    ndxC = T.ndxComp(cID)
+                    If ndxC = -1 Then
+                        Console.WriteLine("Component does not exist")
+                        End
+                    End If
+                    Console.WriteLine("Found Component " + cID.ToString + ": " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "]")
+                    C = T.lib_Comps(ndxC)
+                Else
+                    ndxC = T.ndxCompbyName(cNAME)
+                    If ndxC = -1 Then
+                        Console.WriteLine("Component does not exist")
+                        End
+                    End If
+                    Console.WriteLine("Found Component: " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "]")
+                    C = T.lib_Comps(ndxC)
+                End If
+
+                R.EntityType = "Threats"
+                T.lib_TH = T.getTFThreats(R)
+
+                'Console.WriteLine("Loaded threats: " + T.lib_TH.Count.ToString)
+                Dim ndxT As Integer = 0
+                ndxT = T.ndxTHlib(thrID)
+                If ndxT = -1 Then
+                    Console.WriteLine("Threat does not exist")
+                    End
+                End If
+                Call T.defineTransSRs(T.lib_TH(ndxT).Id)
+
+                Console.WriteLine("      THREAT: [" + T.lib_Comps(ndxT).CompID.ToString + "] " + T.lib_TH(ndxT).Name + " - # Linked SRs: " + T.lib_TH(ndxT).listLinkedSRs.Count.ToString)
+
+                R.EntityType = "SecurityRequirements"
+                T.lib_SR = T.getTFSecReqs(R)
+
+
+
+                Call addCompThreat(C, T.lib_TH(ndxT))
+                End
+
+
             Case "get_comp"
                 Dim cID As Integer = Val(argValue("id", args))
                 Dim cNAME = argValue("name", args)
+
+                Dim editSTR$ = argValue("edit", args)
+                Dim doEDIT As Boolean = False
+                If LCase(editSTR) = "true" Then doEDIT = True
 
                 If cID = 0 And cNAME = "" Then
                     Console.WriteLine("Must provide either an ID or NAME argument to identify component of interest")
@@ -249,7 +398,34 @@ nextOne:
                     Console.WriteLine("Found Component: " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "]")
                     C = T.lib_Comps(ndxC)
                 End If
-                Call getBuiltComponent(C)
+                Call getBuiltComponent(C, doEDIT)
+                End
+
+            Case "show_attr"
+                Dim R As New tfRequest
+                Dim cID As Integer = Val(argValue("id", args))
+                Dim searcH$ = argValue("search", args)
+
+                If Len(searcH) Then searcH = LCase(searcH)
+                With R
+                    .EntityType = "Attributes"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+
+                T.lib_AT = T.getTFAttr(R)
+                Console.WriteLine("Loaded attributes: " + T.lib_AT.Count.ToString)
+                Dim numItems As Integer = 0
+
+                For Each P In T.lib_AT
+                    If cID And P.Id <> cID Then GoTo skipATT
+                    If Len(searcH) And InStr(LCase(P.Name), searcH) = 0 Then GoTo skipATT
+                    Dim idSt$ = "[" + P.Id.ToString + "]"
+                    Console.WriteLine(idSt + spaces(10 - Len(idSt)) + P.Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+                    numItems += 1
+skipATT:
+                Next
+                Console.WriteLine("# of items in this list: " + numItems.ToString)
                 End
 
             Case "show_comp"
@@ -380,7 +556,39 @@ dontDOit:
     End Sub
 
 
-    Private Sub getBuiltComponent(ByRef COMP As tmComponent)
+    Private Sub addCompThreat(COMP As tmComponent, thR As tmProjThreat)
+        Call T.addThreatToComponent(COMP, thR.Id)
+
+        With COMP
+
+            For Each SR In thR.listLinkedSRs
+                'SR represents index
+                Dim sNdx As Integer = T.ndxSRlib(SR)
+                Console.WriteLine("            SR : " + T.lib_SR(sNdx).Name)
+
+                Console.WriteLine("Add this security requirement to the component? (y/n)")
+                    Dim keepThreat As Boolean = True
+                    Dim result = Console.ReadKey()
+
+                    Console.SetCursorPosition(0, Console.CursorTop - 1)
+                    Console.WriteLine(spaces(80))
+                    Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                    If LCase(result.KeyChar.ToString) = "y" Then
+                    'Console.WriteLine(vbCrLf + "Adding SR to component's threat")
+                    If T.matchLabelsOnSR(T.lib_SR(sNdx), COMP.Name) Then
+                        Call T.addEditSR(T.lib_SR(sNdx))
+
+                    End If
+
+                End If
+
+            Next
+
+        End With
+    End Sub
+
+    Private Sub getBuiltComponent(ByRef COMP As tmComponent, Optional ByVal doEDITS As Boolean = False)
         '
 
         'T.labelS = T.getLabels()
@@ -424,6 +632,8 @@ dontDOit:
 
         Call T.buildCompObj(COMP)
 
+        Dim changeS As New Collection
+
         Console.WriteLine(vbCrLf + vbCrLf + "===============================")
         With COMP
 
@@ -452,31 +662,142 @@ dontDOit:
 
             Console.WriteLine("-------------------------------")
             For Each thR In .listThreats
-                Console.WriteLine("THREAT NAME    : " + thR.Name + " [" + thR.listLinkedSRs.Count.ToString + " SRs]")
+                Console.WriteLine("THREAT NAME    : " + thR.Name) ' + " [" + thR.listLinkedSRs.Count.ToString + " SRs]")
+
+                If doEDITS Then
+                    Console.WriteLine("Keep this threat? (y/n)")
+                    Dim keepThreat As Boolean = True
+                    Dim result = Console.ReadKey()
+                    Console.SetCursorPosition(0, Console.CursorTop - 1)
+                    Console.WriteLine(spaces(80))
+                    Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                    If LCase(result.KeyChar.ToString) = "n" Then
+                        Console.WriteLine(vbCrLf + "Removing threat from component")
+                        Call T.removeThreatFromComponent(COMP, thR.Id)
+                        changeS.Add("Removed threat from Component mapping: " + thR.Name + " [" + thR.Id.ToString + "]")
+                        GoTo skipSRsFromThreat
+                    Else
+                        'Console.WriteLine(vbCrLf + "Keeping threat on component")
+                    End If
+                End If
+
+
                 For Each SR In thR.listLinkedSRs
                     'SR represents index
                     Dim sNdx As Integer = T.ndxSRlib(SR)
-                    Console.WriteLine("            SR : " + T.lib_SR(sNdx).Name)
+                    If T.numMatchingLabels(.Labels, T.lib_SR(sNdx).Labels) / .numLabels > 0.9 Then
+                        Console.WriteLine("            SR : " + T.lib_SR(sNdx).Name)
+                        If doEDITS Then
+                            Console.WriteLine("Keep this security requirement on this component? (y/n)")
+                            Dim keepThreat As Boolean = True
+                            Dim result = Console.ReadKey()
+
+                            Console.SetCursorPosition(0, Console.CursorTop - 1)
+                            Console.WriteLine(spaces(80))
+                            Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                            If LCase(result.KeyChar.ToString) = "n" Then
+                                Console.WriteLine(vbCrLf + "Removing SR from component's threat")
+                                If T.removeLabelFromSR(T.lib_SR(sNdx), COMP.Name) Then
+                                    Call T.addEditSR(T.lib_SR(sNdx))
+                                    changeS.Add("Removed SR from Threat " + thR.Name + " [" + thR.Id.ToString + "] - '" + COMP.Name + "' label removed from SR: " + T.lib_SR(sNdx).Name + " [" + T.lib_SR(sNdx).Id.ToString + "]")
+
+                                Else
+                                    Console.WriteLine("Could not find label '" + COMP.Name + "' on SR")
+                                End If
+                            Else
+                                'Console.WriteLine(vbCrLf + "Keeping SR on component's threat")
+                            End If
+                        End If
+
+                    End If
                 Next
+skipSRsFromThreat:
+
             Next
 
 
-                If .listAttr.Count Then
+            If .listAttr.Count Then
                 For Each AT In .listAttr
                     For Each O In AT.Options
                         If O.Threats.Count Then
                             Console.WriteLine("-------------------------------")
                             Console.WriteLine("ATTRIBUTE      : " + AT.Name + spaces(100 - Len(AT.Name)) + "OPTION: " + O.Name + " DEFAULT: " + O.isDefault.ToString + " #TH: " + O.Threats.Count.ToString)
+
+                            If doEDITS Then
+                                Console.WriteLine("Keep this attribute on the component? (y/n)")
+                                Dim keepThreat As Boolean = True
+                                Dim result = Console.ReadKey()
+                                Console.SetCursorPosition(0, Console.CursorTop - 1)
+                                Console.WriteLine(spaces(80))
+                                Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                                If LCase(result.KeyChar.ToString) = "n" Then
+                                    Console.WriteLine(vbCrLf + "Removing attribute from the component")
+                                    Call T.removeAttributeFromComponent(COMP, AT.Id)
+                                    changeS.Add("Removed attribute from Component '" + COMP.Name + "': " + AT.Name + " [" + AT.Id.ToString + "]")
+
+                                    GoTo skipSRsFromThreatATTR
+                                Else
+                                    Console.WriteLine(vbCrLf + "Keeping attribute")
+                                End If
+                            End If
+
                             For Each thR In O.Threats
-                                Console.WriteLine("       THREAT : " + thR.Name + " [" + thR.listLinkedSRs.Count.ToString + " SRs]")
+                                Console.WriteLine("        THREAT : " + thR.Name + " [" + thR.listLinkedSRs.Count.ToString + " SRs]")
+
+                                ' Do we really want to modify ATTRIBUTE/THREAT mapping? 
+                                '                                If doEDITS Then
+                                '                                    Console.WriteLine("Keep this threat on the attribute? (y/n)")
+                                '                                    Dim keepThreat As Boolean = True
+                                '                                    Dim result = Console.ReadKey()
+                                '                                    If LCase(result.KeyChar.ToString) = "n" Then
+                                '                                        Console.WriteLine(vbCrLf + "Removing threat from attribute")
+                                '                                        changeS.Add("Removed threat from Attribute mapping: " + thR.Name + " [" + thR.Id.ToString + "]")
+                                '
+                                '           GoTo skipSRsFromThreatATTR
+                                '       Else
+                                '           Console.WriteLine(vbCrLf + "Keeping threat on attribute")
+                                '       End If
+                                '   End If
 
                                 For Each S In thR.listLinkedSRs
                                     Dim sNdx As Integer = T.ndxSRlib(S)
-                                    Console.WriteLine("            SR : " + T.lib_SR(sNdx).Name)
+                                    If T.numMatchingLabels(.Labels, T.lib_SR(sNdx).Labels) / .numLabels > 0.9 Then
+                                        Console.WriteLine("            SR : " + T.lib_SR(sNdx).Name)
+                                        If doEDITS Then
+                                            Console.WriteLine("Keep this security requirement on this component? (y/n)")
+                                            Dim keepThreat As Boolean = True
+                                            Dim result = Console.ReadKey()
+                                            Console.SetCursorPosition(0, Console.CursorTop - 1)
+                                            Console.WriteLine(spaces(80))
+                                            Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                                            If LCase(result.KeyChar.ToString) = "n" Then
+                                                Console.WriteLine(vbCrLf + "Removing SR from component")
+                                                If T.removeLabelFromSR(T.lib_SR(sNdx), COMP.Name) Then
+                                                    '
+                                                    Call T.addEditSR(T.lib_SR(sNdx))
+                                                    changeS.Add("Removed SR from Threat " + thR.Name + " [" + thR.Id.ToString + "] - '" + COMP.Name + "' label removed from SR: " + T.lib_SR(sNdx).Name + " [" + T.lib_SR(sNdx).Id.ToString + "]")
+
+                                                Else
+                                                    Console.WriteLine("Could not find label '" + COMP.Name + "' on SR")
+                                                End If
+                                            Else
+                                                Console.WriteLine(vbCrLf + "Keeping SR on component")
+                                            End If
+                                        End If
+
+                                    End If
                                 Next
+
                             Next
                         End If
+
                     Next
+skipSRsFromThreatATTR:
+
                 Next
 nope:
 
@@ -484,7 +805,16 @@ nope:
         End With
         Console.WriteLine("==============================")
 
+        If doEDITS = True And changeS.Count > 0 Then
+            Console.WriteLine("Changes made:" + vbCrLf)
+            For Each cc In changeS
+                Console.WriteLine(cc)
+            Next
+        End If
+
     End Sub
+
+
 
     Private Function loginItem(ByRef L As String, ByVal itemNum As Integer) As String
         loginItem = ""
@@ -521,7 +851,10 @@ nope:
         Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
 
         Console.WriteLine(fLine("show_comp", "Returns list of Components, optional arg: --LIB (library name)"))
-        Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name))"))
+        Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name)) OPT: --EDIT true"))
+        Console.WriteLine(fLine("addcomp_threat", "Add a Threat and choose SRs for a Component, use arg: --ID (component ID) or --NAME (component name)) --THREATID (id)"))
+        Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text"))
+
 
         Console.WriteLine(fLine("show_aws_iam", "Show all available AWS IAM accounts"))
         Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
