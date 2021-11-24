@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "get_comp --name democomp --edit true"
+      "commandLineArgs": "attr_report"
     }
   }
 }
