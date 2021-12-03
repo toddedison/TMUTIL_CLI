@@ -65,6 +65,21 @@ Module modCommon
         FileClose(FF)
     End Function
 
+    Public Function ndxLIST(lbl$, L As List(Of String)) As Integer
+        ndxLIST = -1
+
+        lbl = LCase(lbl)
+
+        Dim ndX As Integer = 0
+        For Each P In L
+            If LCase(P) = lbl Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
 
     Public Function csvTOquotedList(ByVal a$, Optional ditchQuotes As Boolean = False) As String
         Dim b$ = ""

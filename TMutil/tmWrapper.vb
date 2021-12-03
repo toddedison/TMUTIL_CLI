@@ -88,7 +88,38 @@ Public Class TM_Client
         'Console.WriteLine("Retrieved access token")
     End Sub
 
-    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "") As String
+    Private Function tfAdd_GetAPIData(ByVal urI$, addJSONbody$)
+
+        ' DO NOT NEED THIS FUNCTION...
+
+        tfAdd_GetAPIData = ""
+        Dim client = New RestClient(tmFQDN + urI)
+        Dim request As RestRequest
+        request = New RestRequest(Method.POST)
+
+        Dim response As IRestResponse
+        client.Timeout = -1
+
+        Dim c$ = Chr(34)
+
+        'var request = New RestRequest(Method.POST);
+        request.AddHeader("sec-ch-ua", c + "Google Chrome" + c + ";v=" + c + "95" + c + ", " + c + "Chromium" + c + ";v=" + c + "95" + c + ", " + c + ";Not A Brand" + c + ";v=" + c + "99" + c)
+        request.AddHeader("sec-ch-ua-mobile", "?0")
+        request.AddHeader("Authorization", "Bearer " + slToken)
+        request.AddHeader("Content-Type", "multipart/form-data") '; boundary=----WebKitFormBoundary1bCpiyr5KkmiBIAJ")
+        request.AddHeader("Accept", "application/json, text/plain, */*")
+        client.UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36"
+        request.AddHeader("sec-ch-ua-platform", c + "macOS" + c)
+        request.AlwaysMultipartFormData = True
+        request.AddParameter("data", addJSONbody)
+
+        response = client.Execute(request)
+
+        Dim K As Integer
+        K = 1
+
+    End Function
+    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False) As String
         getAPIData = ""
         If isConnected = False Then Exit Function
 
@@ -102,21 +133,34 @@ Public Class TM_Client
         request.AddHeader("Accept", "application/json")
 
         If Len(addJSONbody) Then
-            request.AddHeader("Content-Type", "application/json")
+            If addingComp = False Then
+                request.AddHeader("Content-Type", "application/json")
+            Else
+                request.AddHeader("Content-Type", "multipart/form-data") '; boundary=----WebKitFormBoundary1bCpiyr5KkmiBIAJ")
+            End If
             request.AddHeader("Accept-Encoding", "gzip, deflate, br")
 
             request.AddHeader("Accept-Language", "zh")
 
             request.AddHeader("Connection", "keep-alive")
-            request.AddParameter("application/json", addJSONbody, ParameterType.RequestBody)
+            If addingComp = False Then
+                request.AddParameter("application/json", addJSONbody, ParameterType.RequestBody)
+            Else
+                request.AddParameter("data", addJSONbody, ParameterType.RequestBody)
+                request.AlwaysMultipartFormData = True
+            End If
         End If
 
         response = client.Execute(request)
 
+        If addingComp Then
+            Return response.Content
+        End If
+
         Dim O As JObject = JObject.Parse(response.Content)
 
         If IsNothing(O.SelectToken("IsSuccess")) = True Then
-            Console.WriteLine("API Request Rejected: " + urI)
+            Console.WriteLine("API Request Rejected:  " + urI)
             getAPIData = ""
             Exit Function
         End If
@@ -422,6 +466,165 @@ errorcatch:
         Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
 
     End Sub
+
+    Public Sub addEditATTR(AT As tmAttribute)
+        Dim P As New updateEntityObject
+
+        Dim A As New tmAttrCreate
+        '{"LibraryId":0,"EntityType":"Attributes","Model":"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":3,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"New ATTR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"Some ATTR Desc\",\"IsCopy\":false}"}
+        With A
+            .ImagePath = "/ComponentImage/DefaultComponent.jpg"
+            .ComponentTypeId = 3
+            .RiskId = 1
+            .CodeTypeId = 1
+            .DataClassificationId = 1
+            .Name = AT.Name
+            .Labels = "ThreatModeler"
+            .LibrayId = AT.LibraryId
+            .Description = AT.Name
+            .IsCopy = False
+        End With
+
+        With P
+            .LibraryId = AT.LibraryId
+            .EntityType = "Attributes"
+            .Model = JsonConvert.SerializeObject(A)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+
+    End Sub
+
+    Public Function addSR(SR As tmProjSecReq) As Boolean
+        addSR = False
+
+        Dim P As New updateEntityObject
+
+        '"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"NewSR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"SR Desc\",\"IsCopy\":false}"}
+
+        Dim S As New addSRClass
+
+        With S
+            .ImagePath = "/ComponentImage/DefaultComponent.jpg"
+            .ComponentTypeId = 85
+            .RiskId = 1
+            .CodeTypeId = 1
+            .DataClassificationId = 1
+            .Name = SR.Name
+            .Labels = SR.Labels
+            .LibrayId = SR.LibraryId
+            .Description = SR.Description
+            .IsCopy = False
+        End With
+        With P
+            .LibraryId = SR.LibraryId
+            .EntityType = "SecurityRequirements"
+            .Model = JsonConvert.SerializeObject(S)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+
+        Dim K As Integer
+        K = 1
+        If Val(json) Then addSR = True
+
+    End Function
+
+    Public Function addTH(SR As tmProjThreat) As Boolean
+        addTH = False
+
+        Dim P As New updateEntityObject
+
+        '"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"NewSR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"SR Desc\",\"IsCopy\":false}"}
+
+        Dim S As New addTHClass
+
+        With S
+            .ImagePath = "/ComponentImage/DefaultComponent.jpg"
+            .ComponentTypeId = 85
+            .RiskId = 1
+            .CodeTypeId = 1
+            .DataClassificationId = 1
+            .Name = SR.Name
+            .Labels = SR.Labels
+            .LibrayId = SR.LibraryId
+            .Description = SR.Description
+            .IsCopy = False
+        End With
+        With P
+            .LibraryId = SR.LibraryId
+            .EntityType = "Threats"
+            .Model = JsonConvert.SerializeObject(S)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+
+        Dim K As Integer
+        K = 1
+        If Val(json) Then addTH = True
+
+    End Function
+    Public Sub addEditThreat(T As tmProjThreat)
+        Dim P As New updateEntityObject
+        With P
+            .LibraryId = T.LibraryId
+            .EntityType = "SecurityRequirements"
+            .Model = JsonConvert.SerializeObject(T)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+
+    End Sub
+
+    Public Function addEditCOMP(C As tmComponent) As Boolean
+        addEditCOMP = False
+        Dim P As New addCompClass
+
+        Dim newC As New addCompModel
+        With newC
+            .ImagePath = C.ImagePath '"/ComponentImage/DefaultComponent.jpg"
+            .ComponentTypeId = C.ComponentTypeId.ToString
+            .RiskId = 1
+            .CodeTypeId = 1
+            .DataClassificationId = 1
+            .Name = C.Name
+            .ComponentTypeName = C.ComponentTypeName
+            .Labels = C.Labels
+            .LibrayId = C.LibraryId
+            .Description = C.Description
+        End With
+
+        With P
+            .LibraryId = C.LibraryId
+            .EntityType = "Components"
+            .Model = JsonConvert.SerializeObject(newC)
+            .ActionType = "TF_COMPONENT_ADDED"
+            .IsCopy = False
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/componentmaster/addedit", True, jBody, True)
+
+        If InStr(json, "true") Then addEditCOMP = True
+
+
+        '       "{""LibraryId"":94,""EntityType"":""Components"",""Model"":""{\""Id\"":3105,\""Name\"":\""Log Manager\"",\""Description\"":\""<p>A scalable solution for collecting, analyzing, storing and reporting on large volumes of network and security event logs. 
+        'Log Manager collects, analyzes, stores And reports On Network security log events To help organizations protect themselves against threats, attacks And Security breaches. </p><p>Log Manager helps organizations meet compliance monitoring And reporting requirements And it can be 
+        'seamlessly upgraded For a higher level Of threat protection .</p>\"",\ ""ImagePath\"":\""/ComponentImage/462642202006180335030840.png\"",\""Labels\"":null,\""Version\"":\""\"",\""LibraryId\"":94,\""ComponentTypeId\"":66,
+        '\""ComponentTypeName\"":\""Security Control\"",\""Color\"":\""/ComponentImage/462642202006180335030840.png\"",\""Guid\"":\""1b6b1c50-0268-4109-a23d-63297ce72194\"",\""IsHidden\"":false,\""DiagralElementId\"":0,\""ResourceTypeValue\"":null,\""listThreats\"":[],\""listDirectSRs\
+        '"":[],\""listTransSRs\"":[],\""listAttr\"":[],\""isBuilt\"":false,\""duplicateSRs\"":[],\""CompID\"":3105,\""CompName\"":\""Log Manager\"",\""TypeName\"":\""Security Control\"",\""NumTH\"":0,\""NumSR\"":0}""}"
+
+
+        '{"LibraryId":10,"EntityType":"Components","Model":"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":\"3\",\"RiskId\":1,
+        '\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"TestComp\",\"ComponentTypeName\":\"Component\",\"Labels\":\"ThreatModeler\",\"LibrayId\":10,\"Description\":\"Description here\"}","ActionType":"TF_COMPONENT_ADDED","IsCopy":false}
+
+
+
+    End Function
 
     Public Function threatsOfEntity(C As Object, ntyType$) As List(Of tmProjThreat)
         threatsOfEntity = New List(Of tmProjThreat)
@@ -1089,6 +1292,34 @@ skipThose:
 
     End Function
 
+    Public Function ndxMiscByName(name$, libSearch As List(Of tmMiscTrigger)) As Integer
+        ndxMiscByName = -1
+        name = LCase(name)
+        Dim ndX As Integer = 0
+        For Each P In libSearch
+            If LCase(P.Name) = name Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxATTRbyName(namE$) As Integer
+        ndxATTRbyName = -1
+        namE = LCase(namE)
+        Dim ndX As Integer = 0
+        For Each P In lib_AT
+            If LCase(P.Name) = namE Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
     Public Function ndxATTRofList(ID As Long, L As List(Of tmAttribute)) As Integer
         ndxATTRofList = -1
 
@@ -1147,6 +1378,20 @@ skipThose:
 
     End Function
 
+    Public Function ndxSRlibByName(namE$) As Integer
+        ndxSRlibByName = -1
+
+        Dim ndX As Integer = 0
+        For Each P In lib_SR
+            If P.Name = namE Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
 
     Public Function ndxLib(ID As Long) As Integer
         ndxLib = -1
@@ -1161,6 +1406,21 @@ skipThose:
         Next
 
     End Function
+
+    Public Function ndxLibByName(namE$, libS As List(Of tmLibrary)) As Integer
+        ndxLibByName = -1
+
+        Dim ndX As Integer = 0
+        For Each P In libS
+            If LCase(P.Name) = LCase(namE) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+    End Function
+
+
     Public Function ndxComp(ID As Long) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxComp = -1
 
@@ -1176,6 +1436,77 @@ skipThose:
         Next
 
     End Function
+    Public Function ndxCompbyGUID(GUID$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+        ndxCompbyGUID = -1
+
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        Dim ndX As Integer = 0
+        For Each P In lib_Comps
+            If P.Guid.ToString = GUID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function guidTHREAT(GUID$) As tmProjThreat ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidTHREAT = New tmProjThreat
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        For Each P In lib_TH
+            If P.Guid.ToString = GUID Then
+                Return P
+                Exit Function
+            End If
+        Next
+
+    End Function
+    Public Function guidCOMP(GUID$) As tmComponent ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidCOMP = New tmComponent
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        For Each P In lib_Comps
+            If P.Guid.ToString = GUID Then
+                Return P
+                Exit Function
+            End If
+        Next
+
+    End Function
+    Public Function guidSR(GUID$) As tmProjSecReq ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidSR = New tmProjSecReq
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        For Each P In lib_SR
+            If P.Guid.ToString = GUID Then
+                Return P
+                Exit Function
+            End If
+        Next
+
+    End Function
+
+    Public Function guidATTR(GUID$) As tmAttribute ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidATTR = New tmAttribute
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        For Each P In lib_AT
+            If P.Guid.ToString = GUID Then
+                Return P
+                Exit Function
+            End If
+        Next
+
+    End Function
+
+
 
     Public Function ndxCompbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxCompbyName = -1
@@ -1306,6 +1637,57 @@ Public Class updateEntityObject
     Public EntityType$
     Public Model$ ' As tmProjSecReq
 
+End Class
+
+Public Class addCompClass
+    '{"LibraryId":10,"EntityType":"Components","Model":"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":\"3\",\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"TestComp\",\"ComponentTypeName\":\"Component\",\"Labels\":\"ThreatModeler\",\"LibrayId\":10,\"Description\":\"Description here\"}","ActionType":"TF_COMPONENT_ADDED","IsCopy":false}
+    Public LibraryId As Integer
+    Public EntityType$
+    Public Model$
+    Public ActionType$
+    Public IsCopy As Boolean
+
+End Class
+
+Public Class addSRClass
+    '"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"NewSR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"SR Desc\",\"IsCopy\":false}"}
+    Public ImagePath$
+    Public ComponentTypeId As Integer
+    Public RiskId As Integer
+    Public CodeTypeId As Integer
+    Public DataClassificationId As Integer
+    Public Name$
+    Public Labels$
+    Public LibrayId As Integer
+    Public Description$
+    Public IsCopy As Boolean
+End Class
+
+'{"LibraryId"0,"EntityType":"Threats","Model":"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"New Threat\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"Descript\",\"IsCopy\":false}"}
+Public Class addTHClass
+    Public ImagePath$
+    Public ComponentTypeId As Integer
+    Public RiskId As Integer
+    Public CodeTypeId As Integer
+    Public DataClassificationId As Integer
+    Public Name$
+    Public Labels$
+    Public LibrayId As Integer
+    Public Description$
+    Public IsCopy As Boolean
+
+End Class
+Public Class addCompModel
+    Public ImagePath$
+    Public ComponentTypeId$ ' As Integer
+    Public RiskId As Integer
+    Public CodeTypeId As Integer
+    Public DataClassificationId As Integer
+    Public Name$
+    Public ComponentTypeName$
+    Public Labels$
+    Public LibrayId As Integer
+    Public Description$
 End Class
 Public Class tfRequest
     'obj used to request Threats, SRs, Components
@@ -1508,8 +1890,24 @@ Public Class tmCompQueryResp
     'Public listTransSRs As List(Of tmProjSecReq)
     Public listAttr As List(Of tmAttribute)
 End Class
+
+Public Class tmAttrCreate
+    '{"LibraryId":0,"EntityType":"Attributes","Model":"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":3,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"New ATTR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"Some ATTR Desc\",\"IsCopy\":false}"}
+    Public ImagePath$
+    Public ComponentTypeId As Integer
+    Public RiskId As Integer
+    Public CodeTypeId As Integer
+    Public DataClassificationId As Integer
+    Public Name$
+    Public Labels$
+    Public LibrayId As Integer
+    Public Description$
+    Public IsCopy As Boolean
+End Class
+
 Public Class tmAttribute
     Public Id As Long
+    Public Guid? As Guid
     Public Name$
     Public LibraryId As Integer
     Public Options() As tmOptions ' As List(Of tmOptions)

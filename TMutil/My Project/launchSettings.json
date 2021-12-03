@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "attr_report"
+      "commandLineArgs": "i2i_entitylib_sql --i2 demo4.threatmodeler.us"
     }
   }
 }
