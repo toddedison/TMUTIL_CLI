@@ -46,6 +46,90 @@ Module modCommon
         S3 = Nothing
     End Sub
 
+    Public Function trimVal(ByVal a$, Optional ByVal sStr As String = "{},") As String
+        trimVal = ""
+        Dim b$ = ""
+        Dim K As Long = 0
+
+        For K = 1 To Len(a)
+            b$ = Mid(a, K, 1)
+            If InStr(sStr, b) Then
+                Return trimVal
+            Else
+                trimVal += b
+            End If
+        Next
+
+    End Function
+
+    Public Function jsonGetNear(ByVal bigString$, ByVal searchStr$, findKey$) As String
+        ' look in big string for search str.. Once found, trim to { before search str to } after - then find findKey and return value.
+        jsonGetNear = ""
+
+        Dim searchChr As Integer = InStr(bigString, searchStr)
+        If searchChr = 0 Then Exit Function
+
+        Dim stringAfter$ = ""
+        Dim stringBefore$ = ""
+
+        Dim K As Integer = 0
+
+        Dim a$ = ""
+        Dim b$ = ""
+        Dim chrNdx As Integer = searchChr
+
+        b$ = Mid(bigString, chrNdx, 1)
+        Do Until chrNdx > Len(bigString) Or b$ = "}"
+            a$ += b
+            chrNdx += 1
+            b$ = Mid(bigString, chrNdx, 1)
+        Loop
+
+        chrNdx = searchChr - 1
+        b$ = Mid(bigString, chrNdx, 1)
+        Do Until chrNdx = 0 Or b$ = "{"
+            a$ = b + a
+            chrNdx -= 1
+            b$ = Mid(bigString, chrNdx, 1)
+        Loop
+
+        Dim L As List(Of String)
+        L = jsonValues(a, findKey)
+
+        If L.Count Then Return L(0)
+    End Function
+    Public Function jsonValues(ByVal bigString$, ByVal keyName$) As List(Of String)
+        jsonValues = New List(Of String)
+
+        Dim currChr As Long = 1
+        Dim valsFound As New Collection 'must store unique values as replace func will be used.. should only use replace once per unique k/v pair
+
+loopHere:
+        Dim founD As Long = 0
+        founD = InStr(bigString, keyName)
+
+        If founD = 0 Then
+            Exit Function
+        End If
+
+        bigString = Mid(bigString, founD)
+        Dim valString = Mid(bigString, InStr(bigString, ":") + 1) ', InStr(bigString, ",") - 1)
+
+        If LCase(keyName) = "protocolids" Then
+            valString = trimVal(valString, "]")
+        Else
+            valString = trimVal(valString)
+        End If
+
+        If grpNDX(valsFound, valString) = 0 Then
+            jsonValues.Add(LTrim(valString))
+            valsFound.Add(LTrim(valString))
+        End If
+        bigString = Mid(bigString, InStr(bigString, valString) + 2)
+
+        GoTo loopHere
+    End Function
+
     Public Function getLogins() As Collection
         getLogins = New Collection
 
@@ -549,6 +633,18 @@ errorCatch:
 
     End Function
 
+    Public Function streamReaderTxt(fileN$) As String
+        streamReaderTxt = ""
+        Dim fS As New FileStream(fileN, FileMode.Open, FileAccess.Read)
+        Dim sR As New StreamReader(fS)
+
+        Do Until sR.EndOfStream() = True
+            streamReaderTxt += sR.ReadLine() + vbCrLf
+        Loop
+
+        sR = Nothing
+        fS = Nothing
+    End Function
     Public Function cleanJSONright(json$) As String
         ' sometimes additional info 'stacked' onto json array.. doing this rather than customizing objects.. back up to ]
         Dim K As Integer = Len(json)
@@ -576,8 +672,27 @@ errorcatch:
         Return ""
     End Function
 
+    Public Function previousWord(W$, Optional ByVal toSpace As String = " ") As String
+        previousWord = ""
+        Dim a$ = ""
+        Dim K As Integer = 0
 
+        For K = Len(W) To 1 Step -1
+            a$ = Mid(W, K, 1)
+            If a = toSpace Then
+                Return previousWord
+            Else
+                previousWord = a + previousWord
+            End If
+        Next
 
+    End Function
+
+    Public Function noComma(S As String) As String
+        noComma = S
+        If countChars(S, ",") = 0 Then Return noComma
+        If Mid(S, Len(S), 1) = "," Then Return Mid(S, 1, Len(S) - 1)
+    End Function
 
     Public NotInheritable Class Simple3Des
         Private TripleDes As TripleDESCryptoServiceProvider

@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "i2i_entitylib_sql --i2 demo4.threatmodeler.us"
+      "commandLineArgs": "appscan --dir C:\\Users\\micha\\source\\repos\\TMCLI\\TMutil --block \"designer,my project,assemblyinfo\""
     }
   }
 }

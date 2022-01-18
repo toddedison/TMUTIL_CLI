@@ -57,6 +57,16 @@ Module Program
         Dim GRP As List(Of tmGroups)
 
         Select Case LCase(actionWord)
+
+            Case "appscan"
+                Dim sDir$ = argValue("dir", args)
+                Dim block$ = argValue("block", args)
+
+                Dim nScan As New appScan
+                nScan.doScan(sDir, block)
+
+                End
+
             Case "summary"
                 GRP = T.loadAllGroups(T, True)
                 End
@@ -1087,6 +1097,114 @@ dontDOit:
                 '                Call getBuiltComponent(C, False)
                 End
 
+            Case "compattr_mappings"
+                Call allCompMappings()
+                End
+
+            Case "find_dups"
+                Dim ntyType$ = argValue("entity", args)
+                Dim guidONLY As Boolean = False
+                If LCase(argValue("guidonly", args)) = "true" Then guidONLY = True
+                If ntyType = "" Then
+                    Console.WriteLine("Must provide Entity Type/eg '--ENTITY Components'")
+                    End
+                End If
+
+                Select Case LCase(ntyType)
+                    Case "components"
+                        loadNTY(T, "Components")
+                        Dim aList As New Collection
+
+                        For Each C In T.lib_Comps
+                            Dim allC As List(Of tmComponent) = T.findDUPS(C, T, guidONLY)
+                            If allC.Count > 1 Then
+                                For Each Ca In allC
+                                    Dim a$ = "[" + Ca.Id.ToString + "/" + Ca.Guid.ToString + "] " + Ca.Name
+                                    If grpNDX(aList, a) = 0 Then
+                                        aList.Add(a)
+                                        Console.WriteLine(a)
+                                    End If
+                                Next
+                            End If
+
+                        Next
+                    Case "attributes"
+                        loadNTY(T, "Attributes")
+                        Dim aList As New Collection
+
+                        Dim sql$ = ""
+                        Dim sqlTPmap$ = ""
+                        For Each C In T.lib_AT
+                            Dim allC As List(Of tmComponent) = T.findDUPS(C, T, guidONLY)
+                            If allC.Count > 1 Then
+                                For Each Ca In allC
+                                    Dim nameCa$ = Ca.Name
+                                    If Len(Ca.Name) > 50 Then nameCa = Mid(nameCa, 1, 48) + ".."
+                                    Dim a$ = "[" + Ca.Id.ToString + "/" + Ca.Guid.ToString + "] " + nameCa
+                                    Dim map = T.comp_ATTRmapping(Ca.Id)
+                                    If Len(map) Then
+                                        a += " COMPONENTS USING THIS: " + map
+                                        'Console.WriteLine(a)
+                                    End If
+                                    If T.attNumThreats(C) Then
+                                        a += " NUM THREATS ATTACHED: " + T.attNumThreats(C).ToString
+                                    End If
+                                    If grpNDX(aList, a) = 0 Then
+                                        aList.Add(a)
+                                        Console.WriteLine(a)
+                                        If Len(map) = 0 Then
+                                            sql += "'" + UCase(Ca.Guid.ToString) + "'" + ","
+                                            sqlTPmap += Ca.Id.ToString + ","
+                                        End If
+                                    End If
+                                    ' look for attached threats
+
+                                Next
+                            End If
+
+                        Next
+                        If Len(sql) Then Console.WriteLine("DELETE FROM Attributes WHERE GUID IN (" + Mid(sql, 1, Len(sql) - 1) + ")") 'sql)
+                        If Len(sqlTPmap) Then Console.WriteLine("DELETE FROM PropertiesToThreatsMapping WHERE Property_Id IN (" + Mid(sqlTPmap, 1, Len(sqlTPmap) - 1) + ")") 'sql)
+
+
+                    Case "securityrequirements"
+                        loadNTY(T, "SecurityRequirements")
+                        Dim aList As New Collection
+
+                        For Each C In T.lib_SR
+                            Dim allC As List(Of tmComponent) = T.findDUPS(C, T, guidONLY)
+                            If allC.Count > 1 Then
+                                For Each Ca In allC
+                                    Dim a$ = "[" + Ca.Id.ToString + "/" + Ca.Guid.ToString + "] " + Ca.Name
+                                    If grpNDX(aList, a) = 0 Then
+                                        aList.Add(a)
+                                        Console.WriteLine(a)
+                                    End If
+                                Next
+                            End If
+
+                        Next
+                    Case "threats"
+                        loadNTY(T, "Threats")
+                        Dim aList As New Collection
+
+                        For Each C In T.lib_TH
+                            Dim allC As List(Of tmComponent) = T.findDUPS(C, T, guidONLY)
+                            If allC.Count > 1 Then
+                                For Each Ca In allC
+                                    Dim a$ = "[" + Ca.Id.ToString + "/" + Ca.Guid.ToString + "] " + Ca.Name
+                                    If grpNDX(aList, a) = 0 Then
+                                        aList.Add(a)
+                                        Console.WriteLine(a)
+                                    End If
+                                Next
+                            End If
+
+                        Next
+
+                End Select
+                End
+
             Case "i2i_threatloop_addsr"
                 Dim i1 = argValue("i1", args)
                 Dim i2 = argValue("i2", args)
@@ -1287,6 +1405,114 @@ skippingAT2:
                 Next
                 End
 
+
+
+
+            Case "i2i_clonecomp"
+                'clone component from another instance
+                'if item exists, orig is hidden
+                'correlated objects (Threats, SR, ATTR) added as necessary
+                'library loop added - 
+                Dim i1 = argValue("i1", args)
+                Dim i2 = argValue("i2", args)
+
+                Dim T2 As TM_Client = returnTMClient(i2)
+                If IsNothing(T2) = True Then
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                If T2.isConnected = True Then
+                    Console.WriteLine("Connected to both " + T.tmFQDN + " and " + T2.tmFQDN)
+                Else
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                Console.WriteLine("Loading everything from " + T.tmFQDN + " and " + i2)
+
+                loadNTY(T, "Components")
+                loadNTY(T2, "Components")
+                loadNTY(T, "SecurityRequirements")
+                loadNTY(T2, "SecurityRequirements")
+                loadNTY(T, "Threats")
+                loadNTY(T2, "Threats")
+                loadNTY(T, "Attributes")
+                loadNTY(T2, "Attributes")
+                loadNTY(T, "ComponentTypes")
+                loadNTY(T2, "ComponentTypes")
+
+                T.librarieS = T.getLibraries
+                T2.librarieS = T.getLibraries
+
+                Dim libLoop = argValue("library", args)
+                Dim compLoop As New Collection
+
+                Dim TlibID As Integer = 0
+                Dim T2libID As Integer = 0
+
+                TlibID = T.ndxLibByName(libLoop, T.librarieS)
+                T2libID = T2.ndxLibByName(libLoop, T2.librarieS)
+
+                Dim findID As Integer
+
+                If Len(libLoop) Then
+                    If TlibID = -1 Then
+                        Console.WriteLine("ERROR: Cannot find Library " + libLoop + " at " + T.tmFQDN)
+                        End
+                    End If
+                    If T2libID = -1 Then
+                        Console.WriteLine("WARNING: Library does not yet exist " + libLoop + " at " + T2.tmFQDN)
+                        '                        End
+                    End If
+                    findID = T.librarieS(TlibID).Id
+
+                    For Each C In T.lib_Comps
+                        If C.LibraryId = findID Then
+                            compLoop.Add(C.Guid.ToString)
+                        End If
+                    Next
+                    GoTo loopAllComps
+                End If
+
+                Dim cID1 As Integer = Val(argValue("id", args))
+                Dim cNAME1 = argValue("name", args)
+
+                Dim sourceC As tmComponent = findLocalMatch(cID1, cNAME1)
+
+                If sourceC.Id = 0 Then
+                    Console.WriteLine("Cannot find the component at " + T.tmFQDN)
+                    End
+                End If
+
+                Dim deeP As Boolean = False
+                Dim builD As Boolean = False
+                Dim reportOnly As Boolean = False
+
+                If Len(argValue("deep", args)) Then
+                    If LCase(argValue("deep", args)) = "true" Then deeP = True
+                End If
+                If Len(argValue("build", args)) Then
+                    If LCase(argValue("build", args)) = "true" Then builD = True
+                End If
+                If Len(argValue("reportonly", args)) Then
+                    If LCase(argValue("reportonly", args)) = "true" Then reportOnly = True
+                End If
+
+
+                Console.WriteLine(vbCrLf + "Beginning clone..")
+
+                Call cloneComponent(sourceC, T2) ', deeP, builD, reportOnly)
+                End
+loopAllComps:
+
+                For Each cGuid In compLoop
+                    sourceC = T.guidCOMP(cGuid)
+                    Console.WriteLine("Adding.. " + sourceC.Name)
+                    Call cloneComponent(sourceC, T2) ', deeP, builD, reportOnly)
+
+                Next
+                End
 
             Case "i2i_comploop_addth"
                 Dim i1 = argValue("i1", args)
@@ -1678,7 +1904,7 @@ skipComp2:
                 T.librarieS = T.getLibraries
                 T2.librarieS = T2.getLibraries
 
-                Console.WriteLine(T.tmFQDN + " LIBRARIES:")
+                Console.WriteLine(vbCrLf + T.tmFQDN + " LIBRARIES:")
                 Console.WriteLine("==============================")
 
                 With T
@@ -1765,6 +1991,288 @@ skipComp2:
 
                 End
 
+            Case "template_convert"
+
+                Dim i2 = argValue("i2", args)
+                Dim tsID = Val(argValue("id", args))
+                Dim showMatch As Boolean = False
+                Dim newSQL As Boolean = False
+                If LCase(argValue("showmatch", args)) = "true" Then showMatch = True
+                If LCase(argValue("sql", args)) = "true" Then newSQL = True
+
+                Dim T2 As TM_Client = returnTMClient(i2)
+                If IsNothing(T2) = True Then
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                If T2.isConnected = True Then
+                    Console.WriteLine("Connected to both " + T.tmFQDN + " And " + T2.tmFQDN)
+                Else
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                Dim listT As List(Of tmTemplate) = T2.getTemplates
+
+goAgain:
+
+                Console.WriteLine("# of Templates: " + listT.Count.ToString + vbCrLf + vbCrLf)
+
+                loadNTY(T, "Components")
+                loadNTY(T2, "Components")
+
+                Dim sqL$ = ""
+
+                For Each tS In listT
+                    If tsID Then
+                        If tS.Id <> tsID Then GoTo nextTMP
+                    End If
+                    Console.WriteLine(vbCrLf + vbCrLf + "Template: " + tS.Id.ToString + ": " + tS.Name + "    LibraryId: " + tS.LibraryId.ToString)
+                    Console.WriteLine("------------------------------------------")
+
+                    sqL = tS.Json
+
+                    Dim qq$ = Chr(34)
+
+                    Dim nIds As List(Of String) = jsonValues(tS.Json, "NodeId")
+                    Dim ndxNID As Integer = 0
+
+                    For Each N In nIds
+                        Dim C1 As tmComponent
+                        Dim C2 As tmComponent
+
+                        Dim ndxC1 As Integer = 0
+                        ndxC1 = T.ndxComp(Val(N))
+
+                        If ndxC1 = -1 Then
+                            Console.WriteLine("Unable to find NodeId=" + N + " (NAME=" + jsonGetNear(tS.Json, "NodeId" + Chr(34) + ":" + N, "Name") + ")")
+                            GoTo nextNID
+                        End If
+
+                        C1 = T.lib_Comps(ndxC1)
+
+                        If ndxC1 <> -1 Then
+                            C2 = T2.bestMatch(C1, False)
+
+                            If C2.Id <> 0 Then
+                                If showMatch Then Console.WriteLine("[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
+
+                                sqL = Replace(sqL, qq + "NodeId" + qq + ":" + C1.Id.ToString + ",", qq + "NodeId" + qq + ":" + C2.Id.ToString + ",")
+
+                            Else
+                                Console.WriteLine("Cannot find match for " + "[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name)
+                            End If
+
+                        Else
+                            Console.WriteLine("Cannot find match for " + "[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name)
+                        End If
+
+nextNID:
+                        ndxNID += 1
+                    Next
+
+
+                    Dim pIds As List(Of String) = jsonValues(tS.Json, "protocolIds")
+
+                    For Each N In pIds
+                        Dim C1 As tmComponent
+                        Dim C2 As tmComponent
+
+                        Dim origStr$ = qq + "protocolIds" + qq + ":" + N + "]"
+
+                        N = Trim(Replace(N, "[", ""))
+                        N = Replace(N, "]", "")
+
+                        Dim ndxC1 As Integer = 0
+
+                        Dim allProts As New Collection
+                        allProts = CSVtoCOLL(N)
+
+                        Dim newStr$ = ""
+                        For Each nuM In allProts
+                            ndxC1 = T.ndxComp(Val(nuM))
+
+                            If ndxC1 = -1 Then
+                                Console.WriteLine("Unable to find ProtocolId=" + nuM)
+                                GoTo nextPID
+                            End If
+
+                            C1 = T.lib_Comps(ndxC1)
+
+                            If ndxC1 <> -1 Then
+                                C2 = T2.bestMatch(C1, False)
+
+                                If C2.Id <> 0 Then
+                                    'Console.WriteLine("[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
+                                    newStr += C2.Id.ToString + ","
+                                Else
+                                    Console.WriteLine("Cannot find match for " + "[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name)
+                                End If
+
+                            Else
+                                Console.WriteLine("Cannot find match for " + "[" + C1.Id.ToString + "/" + C1.Guid.ToString + "] " + C1.Name)
+                            End If
+                        Next
+                        newStr = qq + "protocolIds" + qq + ":[ " + Mid(newStr, 1, Len(newStr) - 1) + " ]"
+                        If showMatch Then Console.WriteLine(origStr + "      ---> " + newStr)
+                        sqL = Replace(sqL, origStr, newStr)
+nextPID:
+                        Next
+
+
+                    If newSQL Then Console.WriteLine("UPDATE Templates SET Json='" + sqL + "' WHERE Id=" + tS.Id.ToString)
+nextTMP:
+
+                Next
+
+                End
+
+
+            Case "i2i_bestmatch"
+                Dim i1 = argValue("i1", args)
+                Dim i2 = argValue("i2", args)
+
+                Dim T2 As TM_Client = returnTMClient(i2)
+                If IsNothing(T2) = True Then
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                If T2.isConnected = True Then
+                    Console.WriteLine("Connected to both " + T.tmFQDN + " And " + T2.tmFQDN)
+                Else
+                    Console.WriteLine("Unable to connect to " + i2)
+                    End
+                End If
+
+                Dim ntyType$ = argValue("entity", args)
+                If ntyType = "" Then
+                    Console.WriteLine("Must provide Entity Type/eg '--ENTITY Components'")
+                    End
+                End If
+
+                Dim cID1 As Integer = Val(argValue("id", args))
+                Dim cNAME1 = argValue("name", args)
+
+
+                loadNTY(T, ntyType)
+                loadNTY(T2, ntyType)
+
+                Dim sourceO As Object
+                Dim ndX As Integer = 0
+
+                Select Case ntyType
+                    Case "Components"
+                        If Len(cNAME1) Then
+                            ndX = T.ndxCompbyName(cNAME1)
+                            Console.WriteLine("Looking for '" + cNAME1 + "' inside " + T.tmFQDN)
+                            If ndX = -1 Then
+                                Console.WriteLine("Component " + cNAME1 + " does not exist")
+                                End
+                            Else
+                                sourceO = T.lib_Comps(ndX)
+                            End If
+                        End If
+                        If cID1 Then
+                            ndX = T.ndxComp(cID1)
+                            If ndX = -1 Then
+                                Console.WriteLine("Component " + cID1.ToString + " does Not exist")
+                                End
+                            Else
+                                sourceO = T.lib_Comps(ndX)
+
+                            End If
+                        End If
+
+                    Case "Threats"
+                        If Len(cNAME1) Then
+                            ndX = T.ndxTHbyName(cNAME1)
+                            Console.WriteLine("Looking for '" + cNAME1 + "' inside " + T.tmFQDN)
+                            If ndX = -1 Then
+                                Console.WriteLine("Threat " + cNAME1 + " does not exist")
+                                End
+                            Else
+                                sourceO = T.lib_TH(ndX)
+                            End If
+                        End If
+                        If cID1 Then
+                            ndX = T.ndxTHlib(cID1)
+                            If ndX = -1 Then
+                                Console.WriteLine("Threat " + cID1.ToString + " does Not exist")
+                                End
+                            Else
+                                sourceO = T.lib_TH(ndX)
+
+                            End If
+                        End If
+                    Case "SecurityRequirements"
+                        If Len(cNAME1) Then
+
+                            ndX = T.ndxSRbyName(cNAME1)
+                            Console.WriteLine("Looking for '" + cNAME1 + "' inside " + T.tmFQDN)
+                            If ndX = -1 Then
+                                Console.WriteLine("SR " + cNAME1 + " does not exist")
+                                End
+                            Else
+                                sourceO = T.lib_SR(ndX)
+                            End If
+                        End If
+
+                        If cID1 Then
+                            ndX = T.ndxSRlib(cID1)
+                            If ndX = -1 Then
+                                Console.WriteLine("SR " + cID1.ToString + " does Not exist")
+                                End
+                            Else
+                                sourceO = T.lib_SR(ndX)
+
+                            End If
+                        End If
+
+                    Case "Attributes"
+                        If Len(cNAME1) Then
+
+                            ndX = T.ndxATTRbyName(cNAME1)
+                            Console.WriteLine("Looking for '" + cNAME1 + "' inside " + T.tmFQDN)
+                            If ndX = -1 Then
+                                Console.WriteLine("Attribute " + cNAME1 + " does not exist")
+                                End
+                            Else
+                                sourceO = T.lib_AT(ndX)
+                            End If
+                        End If
+
+                        If cID1 Then
+                            ndX = T.ndxATTR(cID1)
+                            If ndX = -1 Then
+                                Console.WriteLine("Attribute " + cID1.ToString + " does Not exist")
+                                End
+                            Else
+                                sourceO = T.lib_TH(ndX)
+
+                            End If
+                        End If
+
+
+                End Select
+
+                If IsNothing(sourceO) = True Then
+                    Console.WriteLine("Unable to match component")
+                    End
+                Else
+                    If sourceO.id = 0 Then
+                        Console.WriteLine("Unable to match component")
+                        End
+                    End If
+                End If
+
+
+                Dim destO As Object = T2.bestMatch(sourceO) ', ntyType)
+
+                Call writeObj(destO, T2)
+                End
+
 
             Case "i2i_allcomp_compare"
                 Dim i1 = argValue("i1", args)
@@ -1782,6 +2290,8 @@ skipComp2:
                     Console.WriteLine("Unable to connect to " + i2)
                     End
                 End If
+
+
                 Dim R As tfRequest
                 R = New tfRequest
                 With R
@@ -1791,44 +2301,115 @@ skipComp2:
                 End With
                 T.lib_Comps = T.getTFComponents(R)
                 T2.lib_Comps = T2.getTFComponents(R)
+                T.librarieS = T.getLibraries
+                T2.librarieS = T2.getLibraries
+
+                Call loadNTY(T, "componenttypes")
+                Call loadNTY(T2, "componenttypes")
+
 
                 Dim numItems As Integer = 0
                 Dim numDiffs As Integer = 0
 
+                Dim diffS(10) As Collection
+                diffS(0) = New Collection
+                diffS(1) = New Collection
+                diffS(2) = New Collection
+                diffS(3) = New Collection
+                diffS(4) = New Collection
+                diffS(5) = New Collection
+                diffS(6) = New Collection
+                diffS(7) = New Collection
+                diffS(8) = New Collection
+                diffS(9) = New Collection
+
+                Dim diffTypes As New Collection
+                With diffTypes
+                    .Add("GUID matches, NAME does not")
+                    .Add("Item does not exist by name or GUID")
+                    .Add("ID does not match (templates/models)")
+                    .Add("Name matches, GUID does not") 'not used
+                    .Add("Library does not match")
+                    .Add("Labels do not match")
+                    .Add("ComponentType does not match")
+                    .Add("NAME exists with different GUID")
+                    .Add("Library does not exist") 'not used
+                    .Add("Non-Corp Components on dest only") 'not used
+                End With
+
+                Dim componentsFound As New Collection
+                For Each cIDs In T2.lib_Comps
+                    componentsFound.Add(cIDs.Id)
+                Next
+
+                Dim items2compare As New Collection
+
                 For Each C In T.lib_Comps
-                    Dim diffS As New Collection
                     numItems += 1
                     Dim ndxT2 As Integer = T2.ndxComp(C.Id)
-
+                    Dim ndxT2name As Integer = T2.ndxCompbyName(C.Name)
                     Dim ndxGUID As Integer = T2.ndxCompbyGUID(C.Guid.ToString)
 
+                    If ndxT2 + ndxT2name + ndxGUID = -3 Then
+                        diffS(1).Add("[" + C.Id.ToString + "] " + C.Name)
+                        GoTo nextItem
+                    End If
+
+                    Dim bestNDX As Integer = -1
+
                     If ndxGUID <> -1 Then
+                        'GUID matches.. is it the same component?
+                        bestNDX = ndxGUID
                         If C.Name <> T2.lib_Comps(ndxGUID).Name Then
-                            diffS.Add("GUID MATCHES, NAME DOES Not")
+                            diffS(0).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + T2.lib_Comps(bestNDX).Id.ToString + "/" + T2.lib_Comps(bestNDX).Guid.ToString + "] " + T2.lib_Comps(bestNDX).Name)
+                            'GoTo nextItem
                         End If
-                    End If
-
-                    If ndxT2 = -1 Then
-                        ' cannot find by ID
-                        If T2.ndxCompbyName(C.Name) = -1 Then
-                            'diffS.Add("Item does Not exist in I2")
+                        'If C.Id <> T2.lib_Comps(ndxGUID).Id Then
+                        '    diffS(2).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + T2.lib_Comps(bestNDX).Id.ToString + "/" + T2.lib_Comps(bestNDX).Guid.ToString + "] " + T2.lib_Comps(bestNDX).Name)
+                        'End If
+                    Else
+                        'GUID doesnt match, can we find it by name?
+                        If ndxT2name <> -1 Then
+                            bestNDX = ndxT2name
+                            diffS(7).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + T2.lib_Comps(bestNDX).Id.ToString + "/" + T2.lib_Comps(bestNDX).Guid.ToString + "] " + T2.lib_Comps(bestNDX).Name)
                         Else
-                            ndxT2 = T2.ndxCompbyName(C.Name)
-                            'diffS.Add("ID")
+                            diffS(1).Add("[" + C.Id.ToString + "] " + C.Name)
+                            GoTo nextItem
                         End If
                     End If
-                    If ndxT2 = -1 Then GoTo nextItem
 
-                    Dim C2 As tmComponent = T2.lib_Comps(ndxT2)
+                    Dim C2 As tmComponent = T2.lib_Comps(bestNDX)
+
+                    items2compare.Add(C.Id)
+
+                    If C2.Id <> C.Id Then
+                        diffS(2).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + T2.lib_Comps(bestNDX).Id.ToString + "/" + T2.lib_Comps(bestNDX).Guid.ToString + "] " + T2.lib_Comps(bestNDX).Name)
+                    End If
+
+                    Dim removeNDX As Integer = grpNDX(componentsFound, T2.lib_Comps(bestNDX).Id)
+                    If removeNDX Then
+                        componentsFound.Remove(removeNDX)
+                    End If
+
 
                     If C.Name <> C2.Name Then
                         'diffS.Add("NAME '" + C.Name + "' | '" + C2.Name + "'")
-                            End If
+                    End If
+
+                    Dim lName$ = T.librarieS(T.ndxLib(C.LibraryId)).Name
+                    Dim rName$ = ""
+
+                    If T2.ndxLib(C2.LibraryId) = -1 Then
+                        diffS(8).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
+                    Else
+                        rName = T2.librarieS(T2.ndxLib(C2.LibraryId)).Name
+                    End If
 
                     ' check library
-                    If C.LibraryId <> C2.LibraryId Then
-                        'diffS.Add("LIBRARY '" + C.LibraryId.ToString + "' | '" + C2.LibraryId.ToString + "'")
+                    If lName <> rName Then
+                        diffS(4).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
                     End If
+skipLibraryCheck:
 
                     ' check library
                     If C.Guid.ToString <> C2.Guid.ToString Then
@@ -1838,7 +2419,7 @@ skipComp2:
 
                     ' labels
                     If C.Labels <> C2.Labels Then
-                        'diffS.Add("LABELS") '" + ctName + "' | '" + ct2Name + "'")
+                        diffS(5).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
                     End If
 
                     Dim ct2Name$ = ""
@@ -1860,32 +2441,116 @@ skipComp2:
                     End With
 
                     If ctName <> ct2Name Then
-                        'diffS.Add("TYPE '" + ctName + "' | '" + ct2Name + "'")
+                        diffS(6).Add("[" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.Name + " DEST: [" + C2.Id.ToString + "/" + C2.Guid.ToString + "] " + C2.Name)
                     End If
 nextItem:
-
-                    Dim a$ = C.CompName + " [" + C.CompID.ToString + "]: " + spaces(50 - Len(C.CompName))
-
-                    If diffS.Count Then
-                        numDiffs += 1
-                        Dim b$ = ""
-                        For Each D In diffS
-                            ' If InStr(b, "NAME") = 0 Then GoTo dontShow
-                            b$ += D + ","
-dontShow:
-                        Next
-                        a$ += diffS.Count.ToString + " - " + b
-
-                    Else
-                        a$ += "FULL MATCH"
-                    End If
-
-                    If InStr(a, "FULL MATCH") = 0 Then Console.WriteLine(a$)
                 Next
 
-                Console.WriteLine("# of Items: " + numItems.ToString)
-                Console.WriteLine("# of Diffs: " + numDiffs.ToString)
+                '                Dim a$ = C.CompName + " [" + C.CompID.ToString + "]: " + spaces(50 - Len(C.CompName))
 
+                'unique to T2
+                If componentsFound.Count Then
+                    For Each cIDs In componentsFound
+                        Dim ndxT As Integer = T2.ndxComp(cIDs)
+                        If T2.lib_Comps(ndxT).LibraryId <> 10 Then diffS(9).Add("[" + T2.lib_Comps(ndxT).Id.ToString + "] " + T2.lib_Comps(ndxT).Name)
+                    Next
+                End If
+
+
+                Dim haveDIFFs As Integer = 0
+                Dim ndxD As Integer = 0
+                For ndxD = 0 To 8 ' dd In diffS
+                    haveDIFFs += diffS(ndxD).Count
+                Next
+
+                Dim fileN$ = ""
+                fileN = argValue("file", args)
+
+
+                Dim FF As Integer = FreeFile()
+                If Len(fileN) Then
+                    safeKILL(fileN)
+                    FileOpen(FF, fileN, OpenMode.Output)
+                End If
+
+                Dim a$ = ""
+                Dim ndxI As Integer = 0
+                Dim sep$ = "======================================="
+                ndxD = 0
+                For Each D In diffTypes
+                    ndxD += 1
+                    If diffS(ndxD - 1).Count Then
+                        a$ = D + spaces(40 - Len(D)) + ": " + diffS(ndxD - 1).Count.ToString
+                        'Console.WriteLine(vbCrLf + vbCrLf + sep)
+                        If Len(fileN) Then PrintLine(FF, vbCrLf + vbCrLf + sep)
+                        Console.WriteLine(a$)
+                        If Len(fileN) Then PrintLine(FF, a$)
+                        For ndxI = 1 To diffS(ndxD - 1).Count
+                            '     Console.WriteLine(diffS(ndxD - 1).Item(ndxI))
+                            If Len(fileN) Then PrintLine(FF, diffS(ndxD - 1).Item(ndxI))
+                        Next
+                    End If
+                Next
+
+                If Len(fileN) Then FileClose(FF)
+                Console.WriteLine("=======================================")
+
+                    Console.WriteLine("# of Items: " + numItems.ToString)
+                    Console.WriteLine("# of Diffs: " + havediffs.ToString)
+
+
+
+                Console.WriteLine("Loading more entities for deep comparison")
+                ' comp compare now
+                loadNTY(T, "SecurityRequirements")
+                loadNTY(T2, "SecurityRequirements")
+                loadNTY(T, "Threats")
+                loadNTY(T2, "Threats")
+                loadNTY(T, "Attributes")
+                loadNTY(T2, "Attributes")
+
+                Console.WriteLine("Showing only components with differences" + vbCrLf)
+                Console.WriteLine("=======================================")
+
+                If Len(fileN) Then
+                    FileOpen(FF, fileN, OpenMode.Append)
+                End If
+
+                Dim numStructureDiffs As Integer = 0
+
+                For Each i In items2compare
+                    Dim C1 As New tmComponent
+                    Dim C2 As New tmComponent
+
+                    C1 = T.lib_Comps(T.ndxComp(i))
+                    C2 = T2.bestMatch(C1, False)
+
+                    'If grpNDX(componentsFound, C2.Id) Then GoTo nextItem2C
+
+                    Dim diffLines As New Collection
+                    diffLines = i2i_compCompare(T2, C1, C2, True, True)
+
+
+                    If diffLines.Count Then
+                        numStructureDiffs += 1
+                        For Each L In diffLines
+                            Console.WriteLine(L)
+
+                            If Len(fileN) Then
+                                PrintLine(FF, L)
+                            End If
+                        Next
+                    End If
+nextItem2C:
+
+                Next
+
+                Dim clos$ = "# of Components with discrepancies: " + numStructureDiffs.ToString
+
+                Console.WriteLine(vbCrLf + vbCrLf + clos)
+                If Len(fileN) Then PrintLine(FF, vbCrLf + vbCrLf + clos)
+
+                If Len(fileN) Then FileClose(FF)
                 End
 
 
@@ -2452,7 +3117,8 @@ nextItem3:
 
                 End
 
-            Case "i2i_comp_update"
+            Case "i2i_comp_compare"
+                'This should be comp_compare
                 Dim cID1 As Integer = Val(argValue("id1", args))
                 Dim cID2 As Integer = Val(argValue("id2", args))
                 Dim cNAME1 = argValue("name1", args)
@@ -2569,6 +3235,16 @@ nextItem3:
                     Console.WriteLine("TYPE  : " + ct2Name)
                 End With
                 Console.WriteLine("===============================")
+
+                Dim compDiffs As New Collection
+                compDiffs = i2i_compCompare(T2, C1, C2, True, False)
+
+                If compDiffs.Count Then
+                    For Each ccc In compDiffs
+                        Console.WriteLine(ccc)
+                    Next
+                End If
+
                 End
 
 
@@ -2773,7 +3449,7 @@ nextItem3:
 
     End Function
 
-    Private Sub compCompare(C1 As tmComponent, C2 As tmComponent, Optional ByVal showSR As Boolean = True, Optional ByVal showDIFF As Boolean = False, Optional ByVal shareONLY As Boolean = False)
+    Private Sub compCompare(C1 As tmComponent, C2 As tmComponent, Optional ByVal showSR As Boolean = True, Optional ByVal showDIFF As Boolean = False, Optional ByVal shareONLY As Boolean = False, Optional ByVal alreadyLoaded As Boolean = False)
         tf_components = New List(Of tmComponent)
         For Each C In T.lib_Comps
             tf_components.Add(C)
@@ -2784,6 +3460,8 @@ nextItem3:
         If shareONLY = True Then Console.WriteLine("Only showing SHARED properties")
 
         Dim R As tfRequest = New tfRequest
+
+        If alreadyLoaded = True Then GoTo skipLoad : 
         With R
             .EntityType = "SecurityRequirements"
             .LibraryId = 0
@@ -2803,6 +3481,7 @@ nextItem3:
         Call T.buildCompObj(C1)
         Call T.buildCompObj(C2)
 
+skipLoad:
 
         Console.WriteLine(vbCrLf + vbCrLf + "===============================")
         Console.WriteLine(C1.CompName + " [" + C1.CompID.ToString + "]      Library " + C1.LibraryId.ToString)
@@ -2981,7 +3660,7 @@ skip3:
                 Next
             End If
 
-            If shareONLY = True Then GoTo skipthat2
+            If shareONLY = True Then GoTo skipThat2
 
             If C2.listAttr.Count Then
                 For Each AT In C2.listAttr
@@ -3001,6 +3680,314 @@ skipThat2:
 
 
     End Sub
+
+    Private Function i2i_compCompare(ByRef T2 As TM_Client, C1 As tmComponent, C2 As tmComponent, Optional ByVal showDIFF As Boolean = False, Optional ByVal alreadyLoaded As Boolean = False) As Collection
+        tf_components = New List(Of tmComponent)
+        For Each C In T.lib_Comps
+            tf_components.Add(C)
+        Next
+
+        Dim numThreatsOff As Long = 0
+        Dim numDirectSRsOff As Long = 0
+        Dim numTransitiveSRsOff As Long = 0
+        Dim numAttributesOff As Long = 0
+
+        Dim numThreats As Long = 0
+        Dim numDirectSRs As Long = 0
+        Dim numTransitiveSRs As Long = 0
+        Dim numAttributes As Long = 0
+
+        i2i_compCompare = New Collection
+
+        Dim showLines As Collection
+
+        'If showDIFF = True Then Console.WriteLine("Only showing DIFFERENCES")
+
+        Dim R As tfRequest = New tfRequest
+
+        If alreadyLoaded = True Then GoTo skipLoad : 
+        With R
+            .EntityType = "SecurityRequirements"
+            .LibraryId = 0
+            .ShowHidden = False
+        End With
+
+        T.lib_SR = T.getTFSecReqs(R)
+        T2.lib_SR = T.getTFSecReqs(R)
+        Console.WriteLine("Loaded security req " + T.lib_SR.Count.ToString)
+
+        R.EntityType = "Threats"
+        T.lib_TH = T.getTFThreats(R)
+        T2.lib_TH = T.getTFThreats(R)
+        Console.WriteLine("Loaded threats " + T.lib_TH.Count.ToString)
+
+        R.EntityType = "Attributes"
+        T.lib_AT = T.getTFAttr(R)
+        T2.lib_AT = T.getTFAttr(R)
+        Console.WriteLine("Loaded attributes " + T.lib_AT.Count.ToString)
+
+skipLoad:
+
+        Call T.buildCompObj(C1)
+        Call T2.buildCompObj(C2)
+
+        showLines = New Collection
+        Dim showD As Boolean = False
+
+        showLines.Add(vbCrLf + vbCrLf + "============> " + T.tmFQDN + " <============")
+        showLines.Add(C1.CompName + " [" + C1.CompID.ToString + "]      Library: " + C1.LibraryId.ToString)
+        showLines.Add("LABELS " + C1.Labels)
+        ' showLines.Add("DESC   " + C1.Description)
+
+        'counting these is useless outside of a loop - added for potential future
+        With C1
+            numThreats += .listThreats.Count
+            numDirectSRs += .listDirectSRs.Count
+            numTransitiveSRs += .listTransSRs.Count
+            numAttributes += .listAttr.Count
+        End With
+        With C2
+            numThreats += .listThreats.Count
+            numDirectSRs += .listDirectSRs.Count
+            numTransitiveSRs += .listTransSRs.Count
+            numAttributes += .listAttr.Count
+        End With
+        If C1.listThreats.Count <> C2.listThreats.Count Then
+            numThreatsOff += 1
+            showD = True
+        End If
+        If C1.listDirectSRs.Count <> C2.listDirectSRs.Count Then
+            numDirectSRsOff += 1
+            showD = True
+        End If
+        If C1.listTransSRs.Count <> C2.listTransSRs.Count Then
+            numTransitiveSRsOff += 1
+            showD = True
+        End If
+        If C1.listAttr.Count <> C2.listAttr.Count Then
+            numAttributesOff += 1
+            showD = True
+        End If
+
+        If showD Then
+
+            With C1
+            showLines.Add("#1     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
+        End With
+        showLines.Add(vbCrLf + vbCrLf + "============> " + T2.tmFQDN + " <============")
+        showLines.Add(C2.CompName + " [" + C2.CompID.ToString + "]      Library: " + C2.LibraryId.ToString)
+        showLines.Add("LABELS " + C2.Labels)
+        ' showLines.Add("DESC   " + C2.Description)
+        With C2
+            showLines.Add("#2     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
+        End With
+        showLines.Add(vbCrLf + vbCrLf + "===============================")
+
+        End If
+
+        'GoTo skipThat2
+
+        With C1
+
+            Dim compSTR$ = ""
+
+            showLines.Add("----DIRECT SECURITY REQS---")
+
+            If .listDirectSRs.Count Then
+                For Each DSR In .listDirectSRs
+                    If T.ndxSR(DSR.Id, C2.listDirectSRs) = -1 Then
+                        compSTR = "[1 ONLY]"
+                    Else
+                        compSTR = "[SHARED]"
+                    End If
+                    If showDIFF = True And compSTR = "[SHARED]" Then GoTo skip1
+
+                    showD = True
+                    showLines.Add("     " + compSTR + "  " + DSR.Name)
+skip1:
+                Next
+            End If
+
+
+            If C2.listDirectSRs.Count Then
+                For Each DSR In C2.listDirectSRs
+                    If T.ndxSR(DSR.Id, .listDirectSRs) = -1 Then
+                        compSTR = "[2 ONLY]"
+                        showD = True
+                        showLines.Add("     " + compSTR + "  " + DSR.Name)
+                    End If
+                Next
+            End If
+
+skipDirectSRs:
+
+            Dim allC1Threats As List(Of tmProjThreat)
+            Dim allC2Threats As List(Of tmProjThreat)
+
+            allC1Threats = New List(Of tmProjThreat)
+            allC2Threats = New List(Of tmProjThreat)
+
+            showLines.Add("------THREATS/SRs-------")
+
+            With allC1Threats
+                For Each th In C1.listThreats
+                    .Add(th)
+                Next
+                For Each A In C1.listAttr
+                    For Each O In A.Options
+                        For Each Th In O.Threats
+                            .Add(Th)
+                        Next
+                    Next
+                Next
+            End With
+
+            With allC2Threats
+                For Each th In C2.listThreats
+                    .Add(th)
+                Next
+                For Each A In C2.listAttr
+                    For Each O In A.Options
+                        For Each Th In O.Threats
+                            .Add(Th)
+                        Next
+                    Next
+                Next
+            End With
+
+            For Each thR In allC1Threats
+                Dim matchedSRs As Collection = T.returnSRsWithLabelMatch(thR, C1)
+                Dim c2matchedSRs As New Collection
+
+                compSTR = ""
+                ' is there a best match for this threat?
+                Dim bM As tmProjThreat = T2.bestMatch(thR)
+                Dim searchID As Integer = 0
+
+                'is it valid?
+                If bM.Id = 0 Then
+                    ' this threat doesn't even exist in the lib
+                Else
+                    searchID = bM.Id
+                End If
+                ' now find the ID of the target list of threats to make sure it matches bm.id
+                If T.ndxTHofList(bM.Id, allC2Threats) = -1 Then
+                    compSTR = "[1 ONLY]"
+                Else
+                    compSTR = "[SHARED]"
+                    c2matchedSRs = T2.returnSRsWithLabelMatch(thR, C2)
+                End If
+
+                If showDIFF = True And compSTR = "[SHARED]" Then GoTo skipSRsFromThreat
+
+                showD = True
+                showLines.Add("THREAT NAME     [" + thR.Id.ToString + "]" + spaces(10 - Len(thR.Id.ToString)) + " " + thR.Name + " [" + matchedSRs.Count.ToString + " Of " + thR.listLinkedSRs.Count.ToString + " SRs] " + compSTR)
+
+
+                For Each sS In matchedSRs 'these have been label matched as they are threats of the collection
+                    'SR represents index
+                    Dim isDUP As Boolean = False
+                    Dim s1S As tmProjSecReq = T.lib_SR(sS)
+                    Dim bMs As tmProjSecReq = T2.bestMatch(s1S, False)
+                    Dim searchIDs As Integer = 0
+
+                    'is it valid?
+                    If bMs.Id = 0 Then
+                        ' this threat doesn't even exist in the lib
+                        bMs.Id = -1
+                    Else
+                        searchID = bMs.Id
+                    End If
+                    If grpNDX(c2matchedSRs, bMs.Id) = 0 Then
+                        compSTR = "[1 ONLY]"
+                    Else
+                        compSTR = "[SHARED]"
+                    End If
+
+                    Dim sNdx As Integer = T.ndxSRlib(sS) ' this is NDX of TMCLIENT Library
+                    Dim SR As tmProjSecReq = T.lib_SR(sNdx)
+                    ' If T.numMatchingLabels(.Labels, T.lib_SR(sNdx).Labels) / .numLabels > 0.9 Then
+                    Dim showName$ = "[" + SR.Id.ToString + "] " + spaces(10 - Len(SR.Id.ToString)) + SR.Name
+
+                    If compSTR <> "[SHARED]" Then
+                        showD = True
+                        showLines.Add("            SR  " + showName + " " + compSTR)
+                    End If
+                Next
+skipSRsFromThreat:
+
+            Next
+
+            For Each thR In allC2Threats
+
+                compSTR = ""
+                If T.ndxTHofList(thR.Id, allC1Threats) = -1 Then
+                    Dim matchedSRs As Collection = T.returnSRsWithLabelMatch(thR, C2)
+
+                    compSTR = "[2 ONLY]"
+
+                    If showDIFF = True And compSTR = "[SHARED]" Then GoTo skipSRsFromThreat2
+
+                    showD = True
+                    showLines.Add("THREAT NAME     [" + thR.Id.ToString + "]" + spaces(10 - Len(thR.Id.ToString)) + " " + thR.Name + " [" + matchedSRs.Count.ToString + " Of " + thR.listLinkedSRs.Count.ToString + " SRs] " + compSTR)
+
+
+                    For Each sS In matchedSRs 'these have been label matched as they are threats of the collection
+                        'SR represents index
+                        Dim isDUP As Boolean = False
+
+                        Dim sNdx As Integer = T.ndxSRlib(sS) ' this is NDX of TMCLIENT Library
+                        Dim SR As tmProjSecReq = T.lib_SR(sNdx)
+                        ' If T.numMatchingLabels(.Labels, T.lib_SR(sNdx).Labels) / .numLabels > 0.9 Then
+                        Dim showName$ = "[" + SR.Id.ToString + "] " + spaces(10 - Len(SR.Id.ToString)) + SR.Name
+
+                        showD = True
+                        showLines.Add("            SR  " + showName + " " + compSTR)
+                    Next
+skipSRsFromThreat2:
+                End If
+            Next
+
+            showLines.Add("-------------------------------")
+
+            If .listAttr.Count Then
+                For Each AT In .listAttr
+
+                    If T.ndxATTRofList(AT.Id, C2.listAttr) = -1 Then
+                        compSTR = "[1 ONLY]"
+                    Else
+                        compSTR = "[SHARED]"
+                    End If
+                    If showDIFF = True And compSTR = "[SHARED]" Then GoTo skip3
+
+                    showD = True
+                    showLines.Add("ATTRIBUTE       [" + AT.Id.ToString + "] " + spaces(10 - Len(AT.Id.ToString)) + AT.Name + spaces(100 - Len(AT.Name)) + "    " + compSTR)
+skip3:
+                Next
+            End If
+
+
+            If C2.listAttr.Count Then
+                For Each AT In C2.listAttr
+
+                    If T.ndxATTRofList(AT.Id, C1.listAttr) = -1 Then
+                        compSTR = "[2 ONLY]"
+                        showD = True
+                        showLines.Add("ATTRIBUTE       [" + AT.Id.ToString + "] " + spaces(10 - Len(AT.Id.ToString)) + AT.Name + spaces(100 - Len(AT.Name)) + compSTR)
+                    End If
+                Next
+            End If
+        End With
+
+skipThat2:
+
+        showLines.Add("==============================")
+
+        If showD = False Then showLines = New Collection
+
+        Return showLines
+
+    End Function
 
     Private Sub compAddComp(C1 As tmComponent, C2 As tmComponent, Optional ByVal showSR As Boolean = True)
         tf_components = New List(Of tmComponent)
@@ -3161,6 +4148,50 @@ showEditThreatAgain:
 
 
         End With
+
+
+    End Sub
+
+    Private Sub removeAllSRFromComp(C1 As tmComponent, TM As TM_Client, Optional ByVal threatsANDattrTOO As Boolean = False)
+        ' Dim allC1Threats As New Collection
+
+        Dim ndxS As Integer = 0
+        Dim thSRs As New Collection
+        Dim atSRs As New Collection
+
+        For Each th In C1.listThreats
+            '.Add(th)
+            thSRs = TM.returnSRsWithLabelMatch(th, C1)
+            For Each S In thSRs
+                ndxS = TM.ndxSRlib(S)
+                If TM.removeLabelFromSR(TM.lib_SR(ndxS), C1.Name) Then
+                    Call T.addEditSR(TM.lib_SR(ndxS))
+                    'make sure label is not there
+                End If
+            Next
+            If threatsANDattrTOO Then TM.removeThreatFromComponent(C1, th.Id)
+        Next
+        For Each A In C1.listAttr
+            For Each O In A.Options
+                For Each Th In O.Threats
+                    '.Add(Th)
+                    atSRs = TM.returnSRsWithLabelMatch(Th, C1)
+                    For Each S In atSRs
+                        ndxS = TM.ndxSRlib(S)
+                        If TM.removeLabelFromSR(TM.lib_SR(ndxS), C1.Name) Then
+                            Call T.addEditSR(TM.lib_SR(ndxS))
+                            'make sure label is not there
+                        End If
+                    Next
+
+                Next
+            Next
+            If threatsANDattrTOO Then TM.removeAttributeFromComponent(C1, A.Id)
+        Next
+
+        'get transitive of all threats and remove labels from SRs
+        'then remove THREAT mapping from Component
+        'Remove Attributes from Component
 
 
     End Sub
@@ -3540,8 +4571,515 @@ nope:
         GC.Collect()
     End Function
 
+    Private Sub cloneComponent(C As tmComponent, T2 As TM_Client)
+        ' if DEEP is true, all items of components are created inside user's default library whether they exist or not (as defined by source instance)
+        ' if DEEP is false, attempt to match to GUIDs, if GUID unavailable attempt to match to TEXT. if neither is available, either report (build=false) or build
+        ' buildNecessary = true/ will build all necessary objects to complete component design
+        ' Threats
+        ' SRs of Threats (incl label matching)
+        ' DirectSRs (NOT DONE YET)
+        ' Attributes
+        ' Threats of Attributes
+        ' SRs of Threats of Attributes
+
+        Dim destC As tmComponent
+
+        destC = T2.bestMatch(C)      '( T2.guidCOMP(C.Guid.ToString)
+
+        Dim targetID As Integer = 0
+        targetID = destC.Id
+
+        If destC.Id = 0 Then
+            Console.WriteLine("Cannot find existing Component")
+        End If
+
+        ' Look up library name by text at Target.. set library ID of target
+        Dim libLoop$ = ""
+        libLoop = T.librarieS(T.ndxLib(C.LibraryId)).Name
+
+        Dim T2libID As Integer = 0
+        T2libID = T2.ndxLibByName(libLoop, T2.librarieS)
+
+        Dim targetLIBid As Integer = 10 'default to CORP
+
+        If T2libID <> -1 Then targetLIBid = T2.librarieS(T2libID).Id
+        ' target library will be specified, though will be corp until API allows library specification
+
+        targetLIBid = 10
+
+        Dim ndxCompType As Integer = 0
+        Dim targetCompTypeId As Integer = 0
+        Dim cTypeS$ = ""
+
+        cTypeS = T.componentTypes(T.ndxCompType(C.ComponentTypeId)).Name
+        targetCompTypeId = T2.ndxCompTypeByName(cTypeS)
+
+        If targetCompTypeId = -1 Then
+            targetCompTypeId = T2.componentTypes(T2.ndxCompTypeByName("Component")).Id
+            Console.WriteLine("Changing from CompType '" + cTypeS + "' to 'Component'")
+            cTypeS = "Component"
+        Else
+            targetCompTypeId = T2.componentTypes(T2.ndxCompTypeByName(cTypeS)).Id
+        End If
+
+        If targetID <> 0 Then
+            ' we need to add a suffix to the name and/or hide the original
+            Call removeallSRfromcomp(destC, T2)
+
+            Console.WriteLine("Hiding original component at " + T2.tmFQDN + "- " + T2.hideItem(destC).ToString)
+            C.IsHidden = False
+            C.Name = Replace(C.Name, "_TM", "")
+        End If
+
+        Console.WriteLine(C.CompName + " [" + C.CompID.ToString + "] - ADDING: " + T2.addEditCOMP(C,, targetLIBid, targetCompTypeId, cTypeS).ToString)
+        Call loadNTY(T2, "Components")
+
+            destC = T2.bestMatch(C)
 
 
+haveDestC:
+
+        Call T.buildCompObj(C)
+
+        For Each tH In C.listThreats
+            Dim destTH As tmProjThreat
+
+            Call writeObj(tH, T)
+            destTH = T2.bestMatch(tH, False) 'T2.guidTHREAT(tH.Guid.ToString)
+
+            If destTH.Id = 0 Then
+                Console.WriteLine("ADDING TO TF  : " + destTH.Name + " [" + destTH.Id.ToString + "] - " + T2.addTH(destTH).ToString)
+                Call loadNTY(T2, "Threats")
+                destTH = T2.bestMatch(destTH, False)
+            End If
+            If destTH.Id <> 0 Then
+                Call T2.addThreatToComponent(destC, destTH.Id)
+                Console.WriteLine("ADDING TO COMP: i1 ID " + tH.Id.ToString + "   i2 ID " + destTH.Id.ToString)
+            End If
+
+            For Each S In tH.listLinkedSRs
+                Dim sourceS As tmProjSecReq
+                Dim ndxS As Integer = T.ndxSRlib(S)
+                sourceS = T.lib_SR(ndxS)
+
+                Dim destS As tmProjSecReq
+                Call writeObj(sourceS, T) '  < why doesnt this work
+                destS = T2.bestMatch(sourceS, False)
+
+                If destS.Id = 0 Then
+                    Console.WriteLine(">>ADDING TO TF    : " + sourceS.Name + " [" + sourceS.Id.ToString + "] - " + T2.addSR(sourceS).ToString)
+                    Call loadNTY(T2, "SecurityRequirements")
+                    destS = T2.bestMatch(sourceS, False)
+                End If
+
+                If destS.Id <> 0 Then
+                    Console.WriteLine(">>ADDING TO THREAT: i1 ID " + tH.Id.ToString + "   i2 ID " + destS.Id.ToString)
+                    Call T2.addSRtoThreat(destTH, destS.Id)
+                    If T2.matchLabelsOnSR(destS, C.Labels) Then
+                        Call T.addEditSR(destS)
+                    End If
+                End If
+            Next
+skipSRs:
+            Console.WriteLine("-----------------------------")
+        Next
+
+        ' now the attributes
+        ' make sure ATTR is viable
+        For Each A In C.listAttr
+            Dim destA As tmAttribute
+            destA = T2.bestMatch(A, False)
+            If destA.Id = 0 Then
+                Dim isViable As Boolean = True
+                If A.Options.Count <> 2 Then
+                    isViable = False
+                End If
+                If A.Options(0).Name <> "Yes" Then
+                    isViable = False
+                End If
+
+
+                If isViable Then
+                    Console.WriteLine("Adding ATTR [" + A.Id.ToString + "] " + A.Name)
+                    T2.addEditATTR(A)
+                    loadNTY(T2, "Attributes")
+                Else
+                    Console.WriteLine("ERROR: This ATTR cannot be created via API currently")
+                    GoTo nextATTR
+                End If
+            Else
+                Console.WriteLine("Adding to Component " + C.Name + ": ATTR [" + A.Id.ToString + "] " + A.Name)
+                T2.addAttributeToComponent(destC, destA.Id)
+            End If
+
+            For Each O In A.Options
+                For Each oTh In O.Threats
+                    Dim destTH As tmProjThreat
+
+                    Dim Th As New tmProjThreat
+                    Dim ndxT As Integer = T.ndxTHlib(oTh.Id)
+                    Th = T.lib_TH(ndxT)
+                    'Call writeObj(Th, T)
+                    ' look up threats by lib_th
+
+                    destTH = T2.bestMatch(Th, True) 'T2.guidTHREAT(tH.Guid.ToString)
+
+                    If destTH.Id = 0 Then
+                        Console.WriteLine("ADDING TO TF  : " + Th.Name + " [" + Th.Id.ToString + "] - " + T2.addTH(Th).ToString)
+                        Call loadNTY(T2, "Threats")
+                        destTH = T2.bestMatch(destTH, False)
+                    Else
+                        Console.WriteLine("THREAT EXISTS.. [" + destTH.Id.ToString + "/" + destTH.Guid.ToString + "] " + destTH.Name)
+                    End If
+                    If destTH.Id <> 0 Then
+
+                        Call T2.addThreatToAttribute(destA, destTH.Id)
+                        Console.WriteLine("ADDING TO ATTR: i1 ID " + Th.Id.ToString + "   i2 ID " + destTH.Id.ToString)
+                    End If
+
+                    Dim atSRs As New Collection
+                    Dim ndxS As Integer = 0
+                    atSRs = T.returnSRsWithLabelMatch(Th, C)
+                    For Each S In atSRs
+                        ndxS = T.ndxSRlib(S)
+                        Dim destS As tmProjSecReq
+                        destS = T2.bestMatch(T.lib_SR(ndxS))
+
+                        If destS.Id = 0 Then
+                            Console.WriteLine(">>ADDING TO TF    : " + T.lib_SR(ndxS).Name + " [" + T.lib_SR(ndxS).Id.ToString + "] - " + T2.addSR(T.lib_SR(ndxS)).ToString)
+                            Call loadNTY(T2, "SecurityRequirements")
+                            destS = T2.bestMatch(T.lib_SR(ndxS), False)
+                        End If
+
+                        If destS.Id <> 0 Then
+                            Console.WriteLine(">>ADDING TO THREAT: i1 ID " + Th.Id.ToString + "   i2 ID " + destS.Id.ToString)
+                            Call T2.addSRtoThreat(destTH, destS.Id)
+                            If T2.matchLabelsOnSR(destS, C.Labels) Then
+                                Call T.addEditSR(destS)
+                            End If
+                        End If
+
+                    Next
+
+                Next
+            Next
+
+nextATTR:
+        Next
+
+
+
+
+
+    End Sub
+
+
+
+    Private Sub cloneComponent2(C As tmComponent, T2 As TM_Client, Optional ByVal deepClone As Boolean = False, Optional ByVal buildNecessaryObjects As Boolean = True, Optional ByVal reportOnly As Boolean = True)
+        'Per Nik 12/6 hide strategy to coponent only/ map bestmatch and/or create for others
+
+        ' if DEEP is true, all items of components are created inside user's default library whether they exist or not (as defined by source instance)
+        ' if DEEP is false, attempt to match to GUIDs, if GUID unavailable attempt to match to TEXT. if neither is available, either report (build=false) or build
+        ' buildNecessary = true/ will build all necessary objects to complete component design
+        ' Threats
+        ' SRs of Threats (incl label matching)
+        ' DirectSRs (NOT DONE YET)
+        ' Attributes
+        ' Threats of Attributes
+        ' SRs of Threats of Attributes
+
+        Console.WriteLine("DEEP=" + deepClone.ToString + ": When true, build a copy of component with all associated objects - otherwise, use best match whenever possible")
+        Console.WriteLine("BUILD=" + buildNecessaryObjects.ToString + ": When DEEPCLONE is False, setting BUILD=TRUE will build a copy of every object not found via GUID or NAME" + vbCrLf)
+        Dim destC As tmComponent
+
+        destC = T2.bestMatch(C)      '( T2.guidCOMP(C.Guid.ToString)
+
+        Dim targetID As Integer = 0
+        targetID = destC.Id
+
+        If destC.Id = 0 Then
+            Console.WriteLine("Cannot find existing Component")
+        End If
+
+
+        If deepClone = True Then
+            ' here build the component and then pull new T2.lib_comp to set DESTC
+            ' should pull componentID from add routine
+
+            If targetID <> 0 Then
+                ' we need to add a suffix to the name and/or hide the original
+                Console.WriteLine("Hiding original component at " + T2.tmFQDN + "- " + T2.hideItem(destC).ToString)
+                C.IsHidden = False
+                C.Name = Replace(C.Name, "_hidden", "")
+            End If
+
+            Console.WriteLine(C.CompName + " [" + C.CompID.ToString + "] - ADDING: " + T2.addEditCOMP(C).ToString)
+            Call loadNTY(T2, "Components")
+
+            destC = T2.bestMatch(C)
+
+        Else
+            If targetID = 0 Then
+                ' if here, unable to find by name or GUID
+                If buildNecessaryObjects = False Then
+                    Console.WriteLine("Exiting routine - need to set BUILD=TRUE to add Component to " + T2.tmFQDN)
+                    Exit Sub
+                End If
+            End If
+        End If
+
+
+        If destC.Id = 0 Then
+            Console.WriteLine("Cannot find Component - unable to add") ' via NAME - must exit here")
+            Exit Sub
+        Else
+            targetID = destC.Id
+        End If
+
+haveDestC:
+
+        Call T.buildCompObj(C)
+
+        For Each tH In C.listThreats
+            Dim destTH As tmProjThreat
+
+            Call writeObj(tH, T)
+            destTH = T2.bestMatch(tH, False) 'T2.guidTHREAT(tH.Guid.ToString)
+
+            If deepClone = True Then
+                'Console.WriteLine("Here will HIDE and ADD/ DEEP is TRUE")
+                If destTH.Id <> 0 Then
+                    Console.WriteLine("HIDING/RENAMING original threat at " + T2.tmFQDN + "- " + T2.hideItem(destTH).ToString)
+                    destTH.IsHidden = False
+                    destTH.Name = Replace(destTH.Name, "_hidden", "")
+                End If
+                Console.WriteLine("ADDING TO TF  : " + destTH.Name + " [" + destTH.Id.ToString + "] - " + T2.addTH(destTH).ToString)
+                Call loadNTY(T2, "Threats")
+                destTH = T2.bestMatch(destTH, False)
+            Else
+                If destTH.Id = 0 And buildNecessaryObjects = True Then
+                    Console.WriteLine("ADDING TO TF  : " + destTH.Name + " [" + destTH.Id.ToString + "] - " + T2.addTH(destTH).ToString)
+                    Call loadNTY(T2, "Threats")
+
+                    destTH = T2.bestMatch(destTH, False)
+                End If
+            End If
+
+            If destTH.Id <> 0 Then
+                Call T2.addThreatToComponent(destC, destTH.Id)
+                Console.WriteLine("ADDING TO COMP: i1 ID " + tH.Id.ToString + "   i2 ID " + destTH.Id.ToString)
+            End If
+
+            For Each S In tH.listLinkedSRs
+                Dim sourceS As tmProjSecReq
+                Dim ndxS As Integer = T.ndxSRlib(S)
+                sourceS = T.lib_SR(ndxS)
+
+                Dim destS As tmProjSecReq
+                Call writeObj(sourceS, T) '  < why doesnt this work
+                'Console.WriteLine(">>SR:" + sourceS.Name)
+                destS = T2.bestMatch(sourceS, True)
+
+                If deepClone = True Then
+                    'Console.WriteLine("Here will HIDE and ADD/ DEEP is TRUE")
+                    If destS.Id <> 0 Then
+                        Console.WriteLine(">>HIDING/RENAMING original SR at " + T2.tmFQDN + "- " + T2.hideItem(destS).ToString)
+                        destS.IsHidden = False
+                        destS.Name = Replace(destS.Name, "_hidden", "")
+                    End If
+                    Console.WriteLine(">>ADDING TO TF    : " + sourceS.Name + " [" + sourceS.Id.ToString + "] - " + T2.addSR(sourceS).ToString)
+                    Call loadNTY(T2, "SecurityRequirements")
+                    destS = T2.bestMatch(sourceS, False)
+                Else
+                    If destS.Id = 0 And buildNecessaryObjects = True Then
+                        Console.WriteLine(">>ADDING TO TF    : " + sourceS.Name + " [" + sourceS.Id.ToString + "] - " + T2.addSR(sourceS).ToString)
+                        Call loadNTY(T2, "SecurityRequirements")
+
+                        destS = T2.bestMatch(sourceS, False)
+                    End If
+                End If
+
+                If destS.Id <> 0 Then
+                    Call T2.addSRtoThreat(destTH, destS.Id)
+                    Console.WriteLine(">>ADDING TO THREAT: i1 ID " + tH.Id.ToString + "   i2 ID " + destS.Id.ToString)
+                End If
+            Next
+skipSRs:
+            Console.WriteLine("-----------------------------")
+        Next
+
+
+
+
+    End Sub
+
+    Private Sub writeObjComp(sourceC As Object, destC As Object, T As TM_Client, Optional ByVal shorTdesc As Boolean = True)
+        Dim tStr$ = T.entityType(sourceC)
+
+        Console.WriteLine(sourceC.Name + " [" + sourceC.Id.ToString + "/" + sourceC.Guid.ToString + "] in " + tStr + " [" + destC.Id.ToString + "/" + destC.Guid.ToString + "] of " + T.tmFQDN) ' - adding " + C.listThreats.Count.ToString + " Threats")
+
+    End Sub
+    Private Sub writeObj(C As Object, T As TM_Client, Optional ByVal shorTdesc As Boolean = True)
+        Dim tStr$ = T.entityType(C)
+
+        Console.WriteLine(tStr + ": [" + C.Id.ToString + "/" + C.Guid.ToString + "] " + C.name)
+
+    End Sub
+
+    Private Sub allCompMappings()
+        Dim R As tfRequest
+        R = New tfRequest
+        With R
+            .EntityType = "Threats"
+            .LibraryId = 0
+            .ShowHidden = False
+        End With
+        T.lib_TH = T.getTFThreats(R)
+        '        T2.lib_TH = T2.getTFThreats(R)
+
+        R.EntityType = "Components"
+        T.lib_Comps = T.getTFComponents(R)
+        'T2.lib_Comps = T2.getTFComponents(R)
+
+        R.EntityType = "SecurityRequirements"
+        T.lib_SR = T.getTFSecReqs(R)
+        ' T2.lib_Comps = T2.getTFComponents(R)
+
+        R.EntityType = "Attributes"
+        T.lib_AT = T.getTFAttr(R)
+        'T2.lib_AT = T2.getTFAttr(R)
+
+        Console.WriteLine("Loaded everything from " + T.tmFQDN)
+
+        Dim numCompsWithAT As Integer = 0
+        Dim firstAT As Boolean = True
+        Dim compsWith As New Collection
+
+        For Each C In T.lib_Comps
+            Console.WriteLine("Building " + C.Name + " [" + C.Id.ToString + "/" + C.Guid.ToString + "]") '] is Comp ID " + destC.Id.ToString + " on i2") ' - # ATTR: " + C.listAttr.Count.ToString) ' - adding " + C.listThreats.Count.ToString + " Threats")
+            Call T.buildCompObj(C,,, True)
+            If C.listAttr.Count = 0 Then GoTo skipComp2
+
+            Dim atStr$ = ""
+            For Each AT In C.listAttr
+                atStr += AT.Id.ToString + ","
+            Next
+            atStr = Mid(atStr, 1, Len(atStr) - 1)
+
+            compsWith.Add("COMP:" + C.Id.ToString + "/" + C.Name + " ATTR:" + atStr)
+            numCompsWithAT += 1
+
+skipComp2:
+
+        Next
+
+        Console.WriteLine("# of Components with Attributes: " + numCompsWithAT.ToString)
+        For Each cc In compsWith
+            Console.WriteLine(cc)
+        Next
+        End
+
+
+    End Sub
+
+    Private Sub loadNTY(clienT As TM_Client, ByVal ntyType$)
+        Dim R As New tfRequest
+
+        With R
+            .LibraryId = 0
+            .ShowHidden = False
+        End With
+
+        Select Case LCase(ntyType)
+            Case "components"
+                R.EntityType = "Components"
+                clienT.lib_Comps = clienT.getTFComponents(R)
+            Case "threats"
+                R.EntityType = "Threats"
+                clienT.lib_TH = clienT.getTFThreats(R)
+            Case "securityrequirements"
+                R.EntityType = "SecurityRequirements"
+                clienT.lib_SR = clienT.getTFSecReqs(R)
+            Case "attributes"
+                R.EntityType = "Attributes"
+                clienT.lib_AT = clienT.getTFAttr(R)
+            Case "componenttypes"
+                R.EntityType = "ComponentTypes"
+                clienT.componentTypes = clienT.getEntityMisc(R)
+            Case "roles"
+                R.EntityType = "Roles"
+                clienT.roleS = clienT.getEntityMisc(R)
+            Case "dataelements"
+                R.EntityType = "DataElements"
+                clienT.dataElements = clienT.getEntityMisc(R)
+
+        End Select
+        'Console.WriteLine("Loaded " + R.EntityType + " from " + clienT.tmFQDN)
+    End Sub
+    Private Function addTF_Attr(sourceT As TM_Client, destT As TM_Client, AT As tmAttribute, Optional ByVal deeP As Boolean = False) As Boolean
+        addTF_Attr = False
+        If AT.Options.Count <> 2 Then
+            Console.WriteLine("This attribute not compatible with API")
+            Exit Function
+        End If
+
+        If AT.Options(0).Name <> "Yes" Then
+            Console.WriteLine("This attribute not compatible with API/ option 1 not YES")
+            Exit Function
+        End If
+
+        Call destT.addEditATTR(AT)
+        Console.WriteLine("ATTR added to " + destT.tmFQDN + ": " + AT.Name)
+
+        'here may need to change/hide original
+
+        Dim destA As tmAttribute
+        Call loadNTY(destT, "Attributes")
+
+        Dim ndxA As Integer = destT.ndxATTRbyName(AT.Name)
+        destA = destT.lib_AT(ndxA)
+
+        With AT.Options(0)
+            For Each tH In .Threats
+                Dim destTH As tmProjThreat
+                Dim ndxT As Integer = sourceT.ndxTHlib(tH.Id)
+                ' have to do this because attributes dont pass the GUID of the Threat
+                Dim libT As tmProjThreat = sourceT.lib_TH(ndxT)
+
+
+                Console.WriteLine("     ADD TH: i1:" + tH.Id.ToString + "   i2:" + destTH.Id.ToString)
+                destT.addThreatToAttribute(destA, destTH.Id)
+            Next
+        End With
+
+        addTF_Attr = True
+    End Function
+
+    Private Function findLocalMatch(cID As Integer, cNAME$) As tmComponent
+        Dim ndxC As Integer = 0
+        findLocalMatch = New tmComponent
+
+        Dim C As tmComponent
+        If cID Then
+            ndxC = T.ndxComp(cID)
+            If ndxC = -1 Then
+                Console.WriteLine("Component does not exist")
+                End
+            End If
+            Console.WriteLine("Found Component " + cID.ToString + ": " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "] at " + T.tmFQDN)
+            C = T.lib_Comps(ndxC)
+        Else
+            ndxC = T.ndxCompbyName(cNAME)
+            If ndxC = -1 Then
+                Console.WriteLine("Component does not exist")
+                End
+            End If
+            Console.WriteLine("Found Component: " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "] at " + T.tmFQDN)
+            C = T.lib_Comps(ndxC)
+        End If
+
+        Return C
+    End Function
     Private Sub giveHelp()
         Console.WriteLine("USAGE: TMCLI action --param1 param1_value --param2 param2_value" + vbCrLf)
         Console.WriteLine("ACTIONS:")
@@ -3550,29 +5088,65 @@ nope:
 
         Console.WriteLine(fLine("makelogin", "Create Login File, args: --FQDN (demo2.thr...), --UN, --PW"))
 
+        Console.WriteLine(vbCrLf + "Accelerator APIs" + vbCrLf + "==============================")
+        Console.WriteLine(fLine("show_aws_iam", "Show all available AWS IAM accounts"))
+        Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
+        Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
+
+        Console.WriteLine(vbCrLf + "Instance Info" + vbCrLf + "==============================")
         Console.WriteLine(fLine("get_notes", "Returns notes associated with all components"))
         Console.WriteLine(fLine("get_groups", "Returns Groups"))
         Console.WriteLine(fLine("get_projects", "Returns Projects"))
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
-
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
         Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
+        Console.WriteLine(fLine("template_convert", "text"))
+
+        Console.WriteLine(vbCrLf + "Local TF Info" + vbCrLf + "==============================")
 
         Console.WriteLine(fLine("show_comp", "Returns list of Components, optional arg: --LIB (library name)"))
         Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name)) OPT: --EDIT true"))
         Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text"))
         Console.WriteLine(fLine("get_attr", "Returns list of attributes or single attribute, OPT --ID Id OPT arg: --SEARCH text"))
         Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT --ID Id OPT arg: --SEARCH text"))
+        Console.WriteLine(fLine("attr_report", "text"))
+        Console.WriteLine(fLine("compattr_mapping", "text"))
+        Console.WriteLine(fLine("comp_compare", "text"))
+        Console.WriteLine(fLine("find_dups", "text"))
 
+
+        Console.WriteLine(vbCrLf + "Local TF Editing" + vbCrLf + "==============================")
         Console.WriteLine(fLine("addcomp_threat", "Add a Threat and choose SRs for a Component, use arg: --ID (component ID) or --NAME (component name)) --THREATID (id)"))
         Console.WriteLine(fLine("addcomp_attr", "Add an Attribute, its Threats and choose SRs for a Component, use arg: --ID (component ID) or --NAME (component name)) --THREATID (id)"))
         Console.WriteLine(fLine("addattr_threat", "Add a Threat and choose SRs for an Attribute, use arg: --ID (attribute ID) --THREATID (id)"))
         Console.WriteLine(fLine("addthreat_sr", "Add a Security Requirement to a Threat, use arg: --ID (threat ID) --SRID (SR ID)"))
         Console.WriteLine(fLine("subthreat_sr", "Remove a Security Requirement from a Threat, use arg: --ID (threat ID) --SRID (SR ID)"))
+        Console.WriteLine(fLine("addcomp_comp", "text"))
 
-        Console.WriteLine(fLine("show_aws_iam", "Show all available AWS IAM accounts"))
-        Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
-        Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
+        Console.WriteLine(vbCrLf + "Instance-to-Instance" + vbCrLf + "==============================")
+        Console.WriteLine(fLine("i2i_threatloop_addsr", "text"))
+        Console.WriteLine(fLine("i2i_attrloop_addattr", "text"))
+        Console.WriteLine(fLine("i2i_attrloop_addth", "text"))
+        Console.WriteLine(fLine("i2i_clonecomp", "text"))
+        Console.WriteLine(fLine("i2i_comploop_addth", "text"))
+        Console.WriteLine(fLine("i2i_comploop_addattr", "text"))
+        Console.WriteLine(fLine("i2i_sql_clean_roles_elements_widgets", "text"))
+        Console.WriteLine(fLine("i2i_lib_compare", "text"))
+        Console.WriteLine(fLine("i2i_sql_libs", "text"))
+        Console.WriteLine(fLine("template_convert", "text"))
+        Console.WriteLine(fLine("i2i_bestmatch", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_compare", "text"))
+        Console.WriteLine(fLine("i2i_allsr_compare", "text"))
+        Console.WriteLine(fLine("i2i_add_comps", "text"))
+        Console.WriteLine(fLine("i2i_add_srs", "text"))
+        Console.WriteLine(fLine("i2i_add_threats", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_loop", "text"))
+        Console.WriteLine(fLine("i2i_entitylib_sql", "text"))
+        Console.WriteLine(fLine("i2i_allsr_loop", "text"))
+        Console.WriteLine(fLine("i2i_allthreat_loop", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_update", "text"))
+        Console.WriteLine(fLine("i2i_comp_compare", "text"))
+
 
     End Sub
 

@@ -26,6 +26,9 @@ Public Class TM_Client
     Public labelS As List(Of tmLabels)
     Public groupS As List(Of tmGroups)
     Public librarieS As List(Of tmLibrary)
+    Public componentTypes As List(Of tmMiscTrigger)
+    Public roleS As List(Of tmMiscTrigger)
+    Public dataElements As List(Of tmMiscTrigger)
 
 
     Public Sub New(fqdN$, uN$, pw$)
@@ -140,7 +143,8 @@ Public Class TM_Client
             End If
             request.AddHeader("Accept-Encoding", "gzip, deflate, br")
 
-            request.AddHeader("Accept-Language", "zh")
+            'request.AddHeader("Accept-Language", "zh")
+            'adding this (Lenovo Chinese) messes up API calls for COmponentTypes and Attributes (prob more)
 
             request.AddHeader("Connection", "keep-alive")
             If addingComp = False Then
@@ -250,6 +254,15 @@ errorcatch:
 
         getLabels = JsonConvert.DeserializeObject(Of List(Of tmLabels))(jsoN)
     End Function
+    Public Function getTemplates() As List(Of tmTemplate)
+        getTemplates = New List(Of tmTemplate)
+        Dim jsoN$ = getAPIData("/api/templates") '/" + tempID.ToString)
+
+        getTemplates = JsonConvert.DeserializeObject(Of List(Of tmTemplate))(jsoN)
+
+    End Function
+
+
 
     Public Function getProjectsOfGroup(G As tmGroups) As List(Of tmProjInfo)
         getProjectsOfGroup = New List(Of tmProjInfo)
@@ -454,7 +467,8 @@ errorcatch:
 
     End Sub
 
-    Public Sub addEditSR(SR As tmProjSecReq)
+    Public Function addEditSR(SR As tmProjSecReq) As String
+        addEditSR = ""
         Dim P As New updateEntityObject
         With P
             .LibraryId = SR.LibraryId
@@ -464,10 +478,24 @@ errorcatch:
 
         Dim jBody$ = JsonConvert.SerializeObject(P)
         Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+        Return json
+    End Function
 
-    End Sub
+    Public Function addEditTH(TH As tmProjThreat) As String
+        addEditTH = ""
+        Dim P As New updateEntityObject
+        With P
+            .LibraryId = TH.LibraryId
+            .EntityType = "Threats"
+            .Model = JsonConvert.SerializeObject(TH)
+        End With
 
-    Public Sub addEditATTR(AT As tmAttribute)
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
+        Return json
+    End Function
+    Public Function addEditATTR(AT As tmAttribute) As String
+        addEditATTR = ""
         Dim P As New updateEntityObject
 
         Dim A As New tmAttrCreate
@@ -493,8 +521,8 @@ errorcatch:
 
         Dim jBody$ = JsonConvert.SerializeObject(P)
         Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
-
-    End Sub
+        Return json
+    End Function
 
     Public Function addSR(SR As tmProjSecReq) As Boolean
         addSR = False
@@ -580,29 +608,140 @@ errorcatch:
 
     End Sub
 
-    Public Function addEditCOMP(C As tmComponent) As Boolean
+    Public Function hideItem(C As Object, Optional unHide As Boolean = False) As Boolean
+        hideItem = False
+
+        Dim jBody$ = ""
+        Dim jSon$ = ""
+        Dim P As New addCompClass
+        With P
+            .LibraryId = C.LibraryId
+            '            .EntityType = "Components"
+            '            .Model = JsonConvert.SerializeObject(COMP)
+            .ActionType = "TF_ENTITY_HIDDEN"
+            If unHide Then C.ishidden = False Else C.ishidden = True
+        End With
+
+        Dim TH As editTHClass = New editTHClass 'move this if rename works without deleting SRs
+
+        Dim editJBODY$ = ""
+
+        Select Case entityType(C)
+            Case "Components"
+                Dim COMP As New tmComponent
+                COMP = C
+                P.EntityType = "Components"
+
+                With P
+                    .EntityType = "Components"
+                    .Model = JsonConvert.SerializeObject(COMP)
+                End With
+
+            Case "SecurityRequirements"
+                Dim COMP As New tmProjSecReq
+                COMP = C
+                P.EntityType = "SecurityRequirements"
+
+                With P
+                    .EntityType = "SecurityRequirements"
+                    .Model = JsonConvert.SerializeObject(COMP)
+                End With
+
+            Case "Threats"
+
+                With C
+                    TH.Name = .Name
+                    TH.Description = .Description
+                    TH.RiskId = .RiskId
+                    TH.RiskName = .RiskName
+                    TH.LibraryId = .LibraryId
+                    TH.Labels = .Labels
+                    TH.Reference = .Reference
+                    TH.Automated = .Automated
+                    TH.StatusName = .StatusName
+                    TH.IsHidden = C.ishidden
+                    TH.CompanyId = .CompanyId
+                    TH.IsDefault = .isDefault
+                    TH.DateCreated = .DateCreated
+                    TH.LastUpdated = .LastUpdated
+                    TH.DepartmentId = .DepartmentId
+                    TH.DepartmentName = .DepartmentName
+                    TH.IsSystemDepartment = .IsSystemDepartment
+                    TH.LibrayId = .LibraryId
+                End With
+
+                ' have to do this as original method will erase SRs from Threat
+
+                With P
+                    .EntityType = "Threats"
+                    .Model = JsonConvert.SerializeObject(TH)
+                End With
+
+
+
+            Case "Attributes"
+                Dim COMP As New tmAttribute
+                COMP = C
+                P.EntityType = "Threats"
+
+                With P
+                    .EntityType = "Attributes"
+                    .Model = JsonConvert.SerializeObject(COMP)
+                End With
+
+        End Select
+
+        jBody$ = JsonConvert.SerializeObject(P)
+        jSon = getAPIData("/api/threatframework/master/addedit", True, jBody)
+        If Val(jSon) Then hideItem = True
+
+        P.ActionType = "TF_COMPONENT_UPDATED"
+
+        'Console.WriteLine("PAYLOAD:" + vbCrLf + jBody + vbCrLf + "RESPONSE:" + vbCrLf + jSon)
+        'now change the name to include "_TM"
+        '{"LibraryId"10,"EntityType":"Components","Model":"{\"Id\":5761,\"Name\":\"Third Party Web Service_hidden\",\"Description\":\"<p>This component represents a standardized way of integrating Web-based applications using the XML, SOAP, WSDL And UDDI open standards over an Internet protocol backbone. </p><p>It Is located out of your network And managed/controlled by a 3rd party. These web applications operate in a client-server model.</p>\",\"ImagePath\":\"/ComponentImage/imageedit_5_6025455498202111181857525963.png\",\"Labels\":\"ThreatModeler,AppSec And InfraSec,Third Party Web Service\",\"Version\":\"\",\"LibraryId\":10,\"ComponentTypeId\":3,\"ComponentTypeName\":\"Component\",\"Color\":\"/ComponentImage/imageedit_5_6025455498202111181857525963.png\",\"Guid\":\"ac207d5c-d579-4dee-8a08-2e95227befff\",\"IsHidden\":false,\"DiagralElementId\":0,\"ResourceTypeValue\":null,\"Attributes\":null,\"LibrayId\":10}","ActionType":"TF_COMPONENT_UPDATED","IsCopy":false}
+
+        If P.EntityType = "Components" Then
+            If unHide = False Then C.Name += "_hidden" Else C.Name = Replace(C.Name, "_hidden", "")
+            P.Model = JsonConvert.SerializeObject(C)
+            jBody$ = JsonConvert.SerializeObject(P)
+            jSon = getAPIData("/api/threatframework/componentmaster/addedit", True, jBody, True)
+
+            'Console.WriteLine("PAYLOAD:" + vbCrLf + jBody + vbCrLf + "RESPONSE:" + vbCrLf + jSon)
+        Else
+            If unHide = False Then C.Name += "_hidden" Else C.Name = Replace(C.Name, "_hidden", "")
+            Select Case P.EntityType
+                Case "Threats"
+                    Call addEditTH(C)
+                Case "SecurityRequirements"
+                    Call addEditSR(C)
+            End Select
+        End If
+
+    End Function
+    Public Function addEditCOMP(C As tmComponent, Optional actioNtypE$ = "TF_COMPONENT_ADDED", Optional overrideLIB As Integer = 0, Optional overrideCTYPE As Integer = 0, Optional overrideCTname$ = "") As Boolean
         addEditCOMP = False
         Dim P As New addCompClass
 
         Dim newC As New addCompModel
         With newC
             .ImagePath = C.ImagePath '"/ComponentImage/DefaultComponent.jpg"
-            .ComponentTypeId = C.ComponentTypeId.ToString
+            If overrideCTYPE Then .ComponentTypeId = overrideCTYPE.ToString Else .ComponentTypeId = C.ComponentTypeId.ToString
             .RiskId = 1
             .CodeTypeId = 1
             .DataClassificationId = 1
             .Name = C.Name
-            .ComponentTypeName = C.ComponentTypeName
+            If overrideCTYPE Then .ComponentTypeName = overrideCTname Else .ComponentTypeName = C.ComponentTypeName
             .Labels = C.Labels
-            .LibrayId = C.LibraryId
+            If overrideLIB Then .LibrayId = overrideLIB Else .LibrayId = C.LibraryId
             .Description = C.Description
         End With
 
         With P
-            .LibraryId = C.LibraryId
+            If overrideLIB Then .LibraryId = overrideLIB Else .LibraryId = C.LibraryId
             .EntityType = "Components"
             .Model = JsonConvert.SerializeObject(newC)
-            .ActionType = "TF_COMPONENT_ADDED"
+            .ActionType = actioNtypE
             .IsCopy = False
         End With
 
@@ -652,6 +791,252 @@ errorcatch:
 
     End Function
 
+    Public Function entityType(C As Object) As String
+        entityType$ = ""
+        Dim ntyType$ = ""
+
+        Select Case Replace(C.GetType.ToString, "TMutil.", "")
+            Case "tmComponent" : ntyType = "Components"
+            Case "tmProjThreat" : ntyType = "Threats"
+            Case "tmProjSecReq" : ntyType = "SecurityRequirements"
+            Case "tmAttribute" : ntyType = "Attributes"
+        End Select
+        Return ntyType
+    End Function
+
+    Public Function bestMatch(C As Object, Optional ByVal showMatch As Boolean = True) As Object
+        bestMatch = New tmComponent With {.Id = 0}
+
+        Dim ndX As Integer = 0
+        Dim namE$ = C.name
+
+        Dim ntyType$ = entityType(C)
+
+        'Console.WriteLine("Finding Best Match of " + ntyType)
+
+        Select Case ntyType$
+            Case "Threats"
+                Dim destTH As New tmProjThreat
+                Dim gString$ = ""
+                If IsNothing(C.guid) = False Then
+                    gString = C.guid.ToString
+                End If
+                destTH = guidTHREAT(gString)
+                If destTH.Id = 0 Then
+                    ndX = ndxTHbyName(C.name)
+                    If ndX <> -1 Then destTH = lib_TH(ndX)
+                    If showMatch Then Console.WriteLine("Best Match NAME '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destTH.Id.ToString + "/" + gString + "]")
+                Else
+                    If showMatch Then Console.WriteLine("Best Match GUID '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destTH.Id.ToString + "/" + destTH.Guid.ToString + "]")
+                End If
+                Return destTH
+            Case "Components"
+                Dim destC As New tmComponent
+                destC = guidCOMP(C.guid.ToString)
+                If destC.Id = 0 Then
+                    ndX = ndxCompbyName(C.name)
+                    If ndX <> -1 Then destC = lib_Comps(ndX)
+                    If showMatch Then Console.WriteLine("Best Match NAME '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destC.Id.ToString + "/" + destC.Guid.ToString + "]")
+                Else
+                    If showMatch Then Console.WriteLine("Best Match GUID '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destC.Id.ToString + "/" + destC.Guid.ToString + "]")
+                End If
+                Return destC
+
+            Case "Attributes"
+                Dim destAT As New tmAttribute
+                destAT = guidATTR(C.guid.ToString)
+                If destAT.Id = 0 Then
+                    ndX = ndxATTRbyName(C.name)
+                    If ndX <> -1 Then destAT = lib_AT(ndX)
+                    If showMatch Then Console.WriteLine("Best Match NAME '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destAT.Id.ToString + "/" + destAT.Guid.ToString + "]")
+                Else
+                    If showMatch Then Console.WriteLine("Best Match GUID '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destAT.Id.ToString + "/" + destAT.Guid.ToString + "]")
+                End If
+                Return destAT
+
+            Case "SecurityRequirements"
+                Dim destSR As New tmProjSecReq
+                destSR = guidSR(C.guid.ToString)
+                If destSR.Id = 0 Then
+                    ndX = ndxSRbyName(C.name)
+                    If ndX <> -1 Then destSR = lib_SR(ndX)
+                    If showMatch Then Console.WriteLine("Best Match NAME '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destSR.Id.ToString + "/" + destSR.Guid.ToString + "]")
+                Else
+                    If showMatch Then Console.WriteLine("Best Match GUID '" + C.name + " [" + C.id.ToString + "/" + C.guid.ToString + "] at " + tmFQDN + " [" + destSR.Id.ToString + "/" + destSR.Guid.ToString + "]")
+
+                End If
+                Return destSR
+
+        End Select
+    End Function
+
+    Public Function comp_ATTRmapping(idAT As Integer, Optional ByVal filen$ = "comp_template_mappings.txt") As String
+        comp_ATTRmapping = ""
+        Dim FF As Integer = FreeFile()
+        FileOpen(FF, filen, OpenMode.Input)
+
+        Dim attrS As New Collection 'the IDs
+        Dim a$ = ""
+        Do Until EOF(FF) = True
+
+            a$ = LineInput(FF)
+            attrS = CSVtoCOLL(Mid(a, InStr(a, "ATTR:") + 1))
+            If grpNDX(attrS, idAT.ToString) Then
+                comp_ATTRmapping += Replace(Mid(a, 1, InStr(a, " ATTR:") - 1), "COMP:", "") + ","
+            End If
+        Loop
+
+        If Len(comp_ATTRmapping) Then comp_ATTRmapping = Mid(comp_ATTRmapping, 1, Len(comp_ATTRmapping) - 1)
+
+        FileClose(FF)
+    End Function
+
+    Public Function attNumThreats(AT As tmAttribute, Optional ByVal optionName As String = "") As Integer
+        attNumThreats = 0
+        For Each O In AT.Options
+            If Len(optionName) Then
+                If LCase(optionName) <> LCase(O.Name) Then GoTo skipThis
+            End If
+            attNumThreats += O.Threats.Count
+skipThis:
+        Next
+
+    End Function
+
+    Public Function findDUPS(C As Object, TM As TM_Client, Optional ByVal findGUIDSonly As Boolean = False) As List(Of tmComponent)
+        findDUPS = New List(Of tmComponent)
+
+        Dim ndX As Integer = 0
+        Dim namE$ = C.name
+        Dim guiD$ = ""
+        If IsNothing(C.Guid) = False Then
+            guiD = C.guid.ToString
+        End If
+
+        Dim ntyType$ = entityType(C)
+
+        'Console.WriteLine("Finding Best Match of " + ntyType)
+
+        Select Case ntyType$
+            Case "Threats"
+                For Each tH In TM.lib_TH
+                    If IsNothing(tH.Guid) = False Then
+                        If LCase(tH.Guid.ToString) = LCase(guiD) Then
+                            Dim newT As New tmComponent
+                            With newT
+                                .Id = tH.Id
+                                .Name = tH.Name
+                                .Guid = tH.Guid
+                                .Description = tH.Description
+                                findDUPS.Add(newT)
+                            End With
+                            GoTo nextOneT
+                        End If
+                    End If
+                    If findGUIDSonly Then GoTo nextOneT
+                    If LCase(tH.Name) = LCase(namE) Then
+                        Dim newT As New tmComponent
+                        With newT
+                            .Id = tH.Id
+                            .Name = tH.Name
+                            .Guid = tH.Guid
+                            findDUPS.Add(newT)
+                        End With
+
+                    End If
+nextOneT:
+                Next
+
+            Case "Components"
+                For Each tH In TM.lib_Comps
+                    If IsNothing(tH.Guid) = False Then
+                        If LCase(tH.Guid.ToString) = LCase(guiD) Then
+                            Dim newT As New tmComponent
+                            With newT
+                                .Id = tH.Id
+                                .Name = tH.Name
+                                .Guid = tH.Guid
+                                .Description = tH.Description
+                                findDUPS.Add(newT)
+                            End With
+                            GoTo nextOneC
+                        End If
+                    End If
+                    If findGUIDSonly Then GoTo nextOneC
+                    If LCase(tH.Name) = LCase(namE) Then
+                        Dim newT As New tmComponent
+                        With newT
+                            .Id = tH.Id
+                            .Name = tH.Name
+                            .Guid = tH.Guid
+                            findDUPS.Add(newT)
+                        End With
+
+                    End If
+nextOneC:
+                Next
+
+            Case "Attributes"
+                For Each tH In TM.lib_AT
+                    If IsNothing(tH.Guid) = False Then
+                        If LCase(tH.Guid.ToString) = LCase(guiD) Then
+                            Dim newT As New tmComponent
+                            With newT
+                                .Id = tH.Id
+                                .Name = tH.Name
+                                .Guid = tH.Guid
+                                '.Description = tH.Description
+                                findDUPS.Add(newT)
+                            End With
+                            GoTo nextOneA
+                        End If
+                    End If
+                    If findGUIDSonly Then GoTo nextOneA
+                    If LCase(tH.Name) = LCase(namE) Then
+                        Dim newT As New tmComponent
+                        With newT
+                            .Id = tH.Id
+                            .Name = tH.Name
+                            .Guid = tH.Guid
+                            findDUPS.Add(newT)
+                        End With
+
+                    End If
+nextOneA:
+                Next
+
+            Case "SecurityRequirements"
+                For Each tH In TM.lib_SR
+                    If IsNothing(tH.Guid) = False Then
+                        If LCase(tH.Guid.ToString) = LCase(guiD) Then
+                            Dim newT As New tmComponent
+                            With newT
+                                .Id = tH.Id
+                                .Name = tH.Name
+                                .Guid = tH.Guid
+                                .Description = tH.Description
+                                findDUPS.Add(newT)
+                            End With
+                            GoTo nextOneS
+                        End If
+                    End If
+                    If findGUIDSonly Then GoTo nextOneS
+                    If LCase(tH.Name) = LCase(namE) Then
+                        Dim newT As New tmComponent
+                        With newT
+                            .Id = tH.Id
+                            .Name = tH.Name
+                            .Guid = tH.Guid
+                            findDUPS.Add(newT)
+                        End With
+
+                    End If
+nextOneS:
+                Next
+        End Select
+    End Function
+
+
     Public Function threatsByBackend(C As Object) As List(Of tmBackEndThreats)
         threatsByBackend = New List(Of tmBackendThreats)
         Dim cResp As New tmCompQueryResp
@@ -678,7 +1063,7 @@ errorcatch:
 
     End Function
 
-    Public Sub buildCompObj(ByVal C As tmComponent, Optional ByVal quickLookup As Boolean = False) ' As tmComponent 'C As tmComponent, ByRef TH As List(Of tmProjThreat), ByRef SR As List(Of tmProjSecReq)) As tmComponent
+    Public Sub buildCompObj(ByVal C As tmComponent, Optional ByVal quickLookup As Boolean = False, Optional ByVal quieT As Boolean = False, Optional ByVal noSRs As Boolean = False) ' As tmComponent 'C As tmComponent, ByRef TH As List(Of tmProjThreat), ByRef SR As List(Of tmProjSecReq)) As tmComponent
         ' Assumes you are passing completed lists of TH and SR using methods above (/api/framework)
         ' This func uses an API QUERY to identify attached TH/DirectSR but only ID and NAME is returned
         ' Full list used to "attach" more complete TH/SR from lists passed ByRef
@@ -743,7 +1128,7 @@ errorcatch:
         End With
 
 
-        If C.ComponentTypeName = "Protocols" Or C.ComponentTypeName = "Security Control" Then GoTo skipForProtocolsAndControls
+        If C.ComponentTypeName = "Protocols" Or C.ComponentTypeName = "Security Control" Or noSRs = True Then GoTo skipForProtocolsAndControls
 
         Dim possibleTransSRs As New List(Of tmProjSecReq)
 
@@ -764,7 +1149,7 @@ errorcatch:
         'GoTo skipForProtocolsAndControls
 
 quickLKP1:
-        Console.WriteLine(vbCrLf)
+        'Console.WriteLine(vbCrLf)
 
         For Each AT In C.listAttr
             For Each O In AT.Options
@@ -801,9 +1186,14 @@ skipForProtocolsAndControls:
 
     Public Function returnSRsWithLabelMatch(T As tmProjThreat, C As tmComponent) As Collection
         returnSRsWithLabelMatch = New Collection
+        Dim ndxS As Integer = 0
+
         With returnSRsWithLabelMatch
             For Each TSRID In T.listLinkedSRs
-                Dim TSR As tmProjSecReq = lib_SR(ndxSRlib(TSRID))
+                Dim TSR As New tmProjSecReq
+                ndxS = ndxSRlib(TSRID)
+                If ndxS = -1 Then GoTo nextSR
+                TSR = lib_SR(ndxS)
 
                 If C.numLabels > 0 Then
                     If numMatchingLabels(C.Labels, TSR.Labels) / C.numLabels > 0.9 Then
@@ -811,6 +1201,7 @@ skipForProtocolsAndControls:
                     End If
                     '        'Console.WriteLine(TSR.Id.ToString + TSR.Name)
                 End If
+nextSR:
             Next
 
         End With
@@ -836,7 +1227,7 @@ skipForProtocolsAndControls:
         Dim cReq As tmTFQueryRequest
         Dim modeL$
 
-        Console.WriteLine(vbCrLf)
+        'Console.WriteLine(vbCrLf)
 
         For K = 0 To C.listThreats.Count - 1
             T = C.listThreats(K)
@@ -1148,7 +1539,6 @@ skipTheLoad:
 
     End Function
 
-
     Public Class tmTFQueryRequest
         Public Model$
         Public LibraryId As Integer
@@ -1420,6 +1810,33 @@ skipThose:
         Next
     End Function
 
+    Public Function ndxCompType(ID As Long) As Integer
+        ndxCompType = -1
+
+        Dim ndX As Integer = 0
+        For Each P In componentTypes
+            If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
+
+    Public Function ndxCompTypeByName(namE$) As Integer
+        ndxCompTypeByName = -1
+
+        Dim ndX As Integer = 0
+        For Each P In componentTypes
+            If LCase(P.Name) = LCase(namE) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+    End Function
+
 
     Public Function ndxComp(ID As Long) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxComp = -1
@@ -1521,6 +1938,22 @@ skipThose:
             End If
             ndX += 1
         Next
+
+    End Function
+
+    Public Function ndxTHbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+        ndxTHbyName = -1
+
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        Dim ndX As Integer = 0
+            For Each P In lib_TH
+                If LCase(P.Name) = LCase(name) Then
+                    Return ndX
+                    Exit Function
+                End If
+                ndX += 1
+            Next
 
     End Function
 
@@ -1649,6 +2082,12 @@ Public Class addCompClass
 
 End Class
 
+Public Class editEntityTH
+    Public LibraryId As Integer
+    Public EntityType$
+    Public ActionType$
+    Public Model$
+End Class
 Public Class addSRClass
     '"{\"ImagePath\":\"/ComponentImage/DefaultComponent.jpg\",\"ComponentTypeId\":85,\"RiskId\":1,\"CodeTypeId\":1,\"DataClassificationId\":1,\"Name\":\"NewSR\",\"Labels\":\"ThreatModeler\",\"LibrayId\":0,\"Description\":\"SR Desc\",\"IsCopy\":false}"}
     Public ImagePath$
@@ -1677,6 +2116,43 @@ Public Class addTHClass
     Public IsCopy As Boolean
 
 End Class
+
+Public Class editTHClass
+    '{"LibraryId":0,"EntityType":"Threats","ActionType":"TF_ENTITY_HIDDEN",
+    '"Model":"{\"Id\":24,\"Guid\":\"1d68189d-90aa-4cbd-8899-8a980d95c312\",
+    '\"Name\":\"Attack through Shared Data\",\"Description\":\"<p>An attacker exploits a data structure shared between multiple applications Or an application pool to affect application behavior. Data may be shared between multiple applications Or between multiple threads of a single application. </p><p>Data sharing Is usually accomplished through mutual access to a single memory location. If an attacker can manipulate this shared data (usually by co-opting one of the applications Or threads) the other applications Or threads using the shared data will often continue to trust the validity of the compromised shared data And use it in their calculations. </p><p>This can result in invalid trust assumptions, corruption of additional data through the normal operations of the other users of the shared data, Or even cause a crash Or compromise of the sharing applications.\\n</p><p>Reference <a href =\\\ "https://capec.mitre.org/data/definitions/124.html\\\" > https : //capec.mitre.org/data/definitions/124.html</a> </p>\",
+    '\"RiskId\":3,\"RiskName\":\"Medium\",\"LibraryId\":1,
+    '\"Labels\":\"CAPEC-124,CAPEC-116,CAPEC-117,CAPEC-153,CAPEC-167,CAPEC-168,CAPEC-194,CAPEC-200,CAPEC-204,CAPEC-215,CAPEC-257,CAPEC-261,CAPEC-277,CAPEC-37,CAPEC-39,CAPEC-255,CAPEC-536,CAPEC-545,CAPEC-567,CAPEC-569,CAPEC-610,OWASP-A6,OWASP-A5-Security-Misconfiguration\",
+    '\"Reference\":null,\"Automated\":false,\"ThreatAttributes\":null,\"StatusName\":null,\"IsHidden\":true,\"CompanyId\":0,
+    '\"SharingType\":null,
+    '\"Readonly\":false,\"IsDefault\":false,\"DateCreated\":\"0001-01-01T0000:00\",\"LastUpdated\":\"0001-01-01T00:00:00\",
+    '\"DepartmentId\":0,
+    '\"DepartmentName\":null,\"Version\":null,\"IsSystemDepartment\":false,\"LibrayId\":0}"}
+    Public Name$
+    Public Description$
+    Public RiskId As Integer
+    Public RiskName$
+    Public LibraryId As Integer
+    Public Labels$
+    Public Reference$
+    Public Automated As Boolean
+    Public ThreatAttributes$
+    Public StatusName$
+    Public IsHidden As Boolean
+    Public CompanyId As Integer
+    Public SharingType As Integer
+    Public [Readonly] As Boolean
+    Public IsDefault As Boolean
+    Public DateCreated$
+    Public LastUpdated$
+    Public DepartmentId As Integer
+    Public DepartmentName$
+    Public Version$
+    Public IsSystemDepartment As Boolean
+    Public LibrayId As Integer
+End Class
+
+
 Public Class addCompModel
     Public ImagePath$
     Public ComponentTypeId$ ' As Integer
@@ -1737,6 +2213,38 @@ Public Class tmGroups
         Public GroupUsers$
         Public AllProjInfo As List(Of tmProjInfo)
     End Class
+Public Class tmTemplate
+    Public Id As Long
+    Public Name$
+    Public LibraryId As Integer
+    Public [Type] As String
+    Public Json$
+    '    "Description": null,
+    '    "Labels": "",
+    '    "Image": null,
+    '    "DiagramData": "data:image/png;base64,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",
+    '    "LibraryName": "Mike Horty",
+    '    "isUpdate": false
+    Public Description$
+    Public Labels$
+    Public Image$
+    Public DiagramData$
+    Public LibraryName$
+    Public isUpdate As Boolean
+    Public ReadOnly Property TempId
+        Get
+            Return Id
+        End Get
+    End Property
+    Public ReadOnly Property TemplateName
+        Get
+            Return Name
+        End Get
+    End Property
+
+End Class
+
+
 
 Public Class tmLabels
     Public Id As Long
