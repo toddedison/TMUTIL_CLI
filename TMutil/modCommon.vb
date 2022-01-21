@@ -46,6 +46,33 @@ Module modCommon
         S3 = Nothing
     End Sub
 
+    Public Function inStrList(ByRef L As List(Of String), theStr$, Optional ByVal caseSensitive As Boolean = False) As Boolean
+        inStrList = False
+
+        If caseSensitive = False Then
+            theStr = LCase(theStr)
+        End If
+
+        For Each S In L
+            If caseSensitive = False Then S = LCase(S)
+            If S = theStr Then
+                Return True
+                Exit Function
+            End If
+        Next
+    End Function
+
+    Public Function inIntList(ByRef L As List(Of Integer), theNum As Integer) As Boolean
+        inIntList = False
+
+        For Each nuM In L
+            If nuM = theNum Then
+                Return True
+                Exit Function
+            End If
+        Next
+    End Function
+
     Public Function trimVal(ByVal a$, Optional ByVal sStr As String = "{},") As String
         trimVal = ""
         Dim b$ = ""

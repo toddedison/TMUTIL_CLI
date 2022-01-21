@@ -57,14 +57,77 @@ Module Program
         Dim GRP As List(Of tmGroups)
 
         Select Case LCase(actionWord)
+            Case "submitkiss"
+                Dim modelName$ = argValue("modelname", args)
+                modelName = Now.Ticks.ToString + modelName
+
+                Dim modelNum As Integer
+                Dim result2$ = T.createKISSmodelForImport(modelName)
+                modelNum = Val(result2)
+                If modelNum = 0 Then
+                    Console.WriteLine("Unable to create project - " + result2)
+                    End
+                End If
+
+                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                End If
+
+                Console.WriteLine(T.importKISSmodel(fileN, modelNum))
+                Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End
 
             Case "appscan"
                 Dim sDir$ = argValue("dir", args)
                 Dim block$ = argValue("block", args)
 
-                Dim nScan As New appScan
-                nScan.doScan(sDir, block)
+                Dim publicOnly As Boolean = False
+                Dim classesOnly As Boolean = False
 
+                Dim showOnlyFiles$ = argValue("onlyfiles", args)
+                If Len(argValue("onlypublic", args)) Then
+                    If LCase(argValue("onlypublic", args)) = True Then publicOnly = True
+                End If
+                If Len(argValue("onlyclasses", args)) Then
+                    If LCase(argValue("onlyclasses", args)) = True Then classesOnly = True
+                End If
+
+                Dim methodsToWatch$ = argValue("watchmethod", args)
+                Dim classesToWatch$ = argValue("watchclass", args)
+                Dim maxdepth As Integer = Val(argValue("depth", args))
+
+
+                Console.WriteLine("Scanning for classes and methods")
+                Dim nScan As New appScan
+                Dim resulT1$ = ""
+                resulT1 = nScan.doScan(sDir, block, classesToWatch, methodsToWatch, showOnlyFiles, publicOnly, classesOnly, maxdepth)
+
+                If resulT1 = "ERROR" Or Dir(resulT1) = "" Then
+                    Console.WriteLine("Unable to create JSON file")
+                    If Dir(resulT1) = "" Then Console.WriteLine("File not found: " + resulT1)
+                    End
+                End If
+
+
+
+                Dim modelName$ = argValue("modelname", args)
+                modelName = Now.Ticks.ToString + modelName
+
+                Dim modelNum As Integer
+                Dim result2$ = T.createKISSmodelForImport(modelName)
+                modelNum = Val(result2)
+                If modelNum = 0 Then
+                    Console.WriteLine("Unable to create project - " + result2)
+                    End
+                End If
+
+                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+                Console.WriteLine(T.importKISSmodel(resulT1, modelNum))
+                Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
                 End
 
             Case "summary"
@@ -4242,7 +4305,7 @@ showEditThreatAgain:
 
                 If LCase(result.KeyChar.ToString) = "y" Then
                     'Console.WriteLine(vbCrLf + "Adding SR To component's threat")
-                    If T.matchLabelsOnSR(T.lib_SR(sNdx), COMP.Name) Then
+                    If T.matchLabelsOnSR(T.lib_SR(sNdx), COMP.Labels) Then
                         Call T.addEditSR(T.lib_SR(sNdx))
 
                     End If

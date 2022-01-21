@@ -122,7 +122,7 @@ Public Class TM_Client
         K = 1
 
     End Function
-    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False) As String
+    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False, Optional ByVal addFileN$ = "") As String
         getAPIData = ""
         If isConnected = False Then Exit Function
 
@@ -155,6 +155,10 @@ Public Class TM_Client
             End If
         End If
 
+        If Len(addFileN) Then
+            request.AddFile("File", addFileN)
+        End If
+
         response = client.Execute(request)
 
         If addingComp Then
@@ -168,6 +172,14 @@ Public Class TM_Client
             getAPIData = ""
             Exit Function
         End If
+
+        '        If Len(addFileN) Then
+        '            If O.SelectToken("IsSuccess").ToString = "true" Then
+        '                Return O.SelectToken("IsSuccess").ToString
+        '            Else
+        '                Return response.Content
+        '            End If
+        '        End If
 
         If CBool(O.SelectToken("IsSuccess")) = False Then
             getAPIData = "ERROR:Could not retrieve " + urI
@@ -466,6 +478,45 @@ errorcatch:
         Dim json$ = getAPIData("/api/threatframework/updateproperty", True, jBody)
 
     End Sub
+
+    Public Function createKISSmodelForImport(modelName$, Optional ByVal riskId As Integer = 1, Optional ByVal versioN As Integer = 1, Optional ByVal labelS$ = "", Optional ByVal modelType$ = "Others") As String
+        '{"Id":0,
+        '"Name""test_meth_inst2",
+        '"RiskId":1,"Labels":"",
+        '"Version":"1","IsValidFile":false,
+        '"Type":"AWSCloudApplication",
+        '"CreatedThrough":"Blank","UserPermissions":[],
+        '"GroupPermissions":[]}
+        Dim newM As kisCreateModel_setProject = New kisCreateModel_setProject
+
+        createKISSmodelForImport = ""
+
+        With newM
+            .Id = 0
+            .Name = modelName
+            .RiskId = riskId
+            .Version = versioN
+            .Labels = labelS
+            .Type = modelType
+            .CreatedThrough = "Blank"
+            .UserPermissions = New List(Of String)
+            .GroupPermissions = New List(Of String)
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(newM)
+        Dim jSon$ = getAPIData("/api/project/create", True, jBody)
+
+
+
+        Return jSon
+    End Function
+
+    Public Function importKISSmodel(fileN$, projNum As Integer) As String
+        importKISSmodel = ""
+
+        Dim jSon$ = getAPIData("/api/import/" + projNum.ToString + "/Kis", True,,, fileN)
+        Return "Action Completed"
+    End Function
 
     Public Function addEditSR(SR As tmProjSecReq) As String
         addEditSR = ""
@@ -1538,6 +1589,27 @@ skipTheLoad:
         SR.Labels = lbL
 
     End Function
+
+    Public Class kisCreateModel_setProject
+        '{"Id":0,
+        '"Name""test_meth_inst2",
+        '"RiskId":1,"Labels":"",
+        '"Version":"1","IsValidFile":false,
+        '"Type":"AWSCloudApplication",
+        '"CreatedThrough":"Blank","UserPermissions":[],
+        '"GroupPermissions":[]}
+
+        Public Id As Integer
+        Public Name As String
+        Public RiskId As Integer
+        Public Labels As String
+        Public Version As Integer
+        Public isValidFile As Boolean
+        Public [Type] As String
+        Public CreatedThrough As String
+        Public UserPermissions As List(Of String)
+        Public GroupPermissions As List(Of String)
+    End Class
 
     Public Class tmTFQueryRequest
         Public Model$
