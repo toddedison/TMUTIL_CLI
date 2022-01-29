@@ -19,12 +19,19 @@ Public Class appScan
     Private allMethods As List(Of Method)
     'Private allClasses As List(Of ClassS)
 
-    Private classesOnly As Boolean
     Private onlyFiles As String
     Private onlyPublic As Boolean
     Private classWatch As String
     Private methodWatch As String
     Private maxDepth As Integer
+
+    Private modelType As String
+
+    Public bestMethod As String
+    Public bestRMethod As String
+    Public bestCC As String
+    Public bestCL As String
+    Public bestSF As String
 
     Private Class Counter
         Private currCount As Integer
@@ -113,6 +120,7 @@ Public Class appScan
     Private Class searchMethods
         Public searchStr As String
         Public sourcePath As String
+        Public scopE As String
     End Class
     Private Class classInst
         Public varName As String
@@ -160,21 +168,28 @@ Public Class appScan
 
     End Class
 
-    'Private Class ClassObj
-    '    Public Name$
-    '    Public oType As String '
-    'End Class
 
-
-
-    Public Function doScan(dirToScan$, files2Block$, Optional ByVal classes2Watch$ = "", Optional ByVal methods2Watch$ = "", Optional ByVal files2show$ = "", Optional ByVal showOnlyPublicObj As Boolean = False, Optional ByVal showOnlyClasses As Boolean = False, Optional ByVal maximumDepth As Integer = 0) As String
+    Public Function doScan(dirToScan$, files2Block$, Optional ByVal objects2Watch$ = "", Optional ByVal mType$ = "", Optional ByVal files2show$ = "", Optional ByVal maximumDepth As Integer = 0, Optional ByVal showClients As Boolean = False) As String
         ' I think these globals are unnecessary - confirm
-        classWatch = classes2Watch
-        methodWatch = methods2Watch
+        'resulT1 = nScan.doScan(sDir, block, objectsToWatch, modelType, showOnlyFiles, maxDepth)
+
+        ' whole
+        ' objmap - structuremap
+        ' classwatch - singleclass
+        ' clients - callers
+        ' public - property
+        If mType = "" Then modelType = "full"
+        If mType = "methodmap" Then methodWatch = objects2Watch
+        If mType = "classmap" Then classWatch = objects2Watch
+        If mType = "public" Then onlyPublic = True
+
+        modelType = mType
+
+        Dim showOnlyClasses As Boolean = False
+        If mType = "classmap" Then showOnlyClasses = True
+
         onlyFiles = files2show
         maxDepth = maximumDepth
-        onlyPublic = showOnlyPublicObj
-        classesOnly = showOnlyClasses
 
         methodCounter = New Counter
         fileCounter = New Counter
@@ -230,7 +245,7 @@ Public Class appScan
 
         Dim jSon$ = ""
 
-        allJsonObjects = newTM.getJSONobjects(Me, showOnlyClasses, showOnlyPublicObj)
+        allJsonObjects = newTM.getJSONobjects(Me, showOnlyClasses)
 
         Console.WriteLine("# of Objects in Class/Method Map: " + allJsonObjects.Count.ToString)
 
@@ -238,8 +253,14 @@ Public Class appScan
 
         'allJson = every object
         'here we do the slicing according to depth
-        If Len(classWatch) Or Len(methodWatch) Then
-            Dim CH As List(Of Integer) = chosenObjects(allJsonObjects, classes2Watch, methods2Watch)
+        If Len(objects2Watch) Then
+            Dim CH As List(Of Integer)
+            If showOnlyClasses Then
+                CH = buildChosenObjects(allJsonObjects, objects2Watch, "")
+            Else
+                CH = buildChosenObjects(allJsonObjects, "", objects2Watch)
+            End If
+
             If CH.Count = 0 Then
                 Dim eMsg$ = "ERROR: No matches found in class/method objects"
                 Console.WriteLine(eMsg)
@@ -249,7 +270,7 @@ Public Class appScan
                 '        Console.WriteLine("Matched " + CH.Count.ToString + " objects")
             End If
 
-            allFilteredObjects = newTM.buildSlice(allJsonObjects, CH, maximumDepth)
+            allFilteredObjects = newTM.buildSlice(allJsonObjects, CH, maximumDepth, showClients)
             jSon = JsonConvert.SerializeObject(allFilteredObjects)
         Else
             jSon = JsonConvert.SerializeObject(allJsonObjects)
@@ -263,23 +284,24 @@ Public Class appScan
         'Console.WriteLine(jSon)
     End Function
 
-    Private Function chosenObjects(ByRef allObj As List(Of makeTMJson.tmObject), classes$, methods$) As List(Of Integer)
-        chosenObjects = New List(Of Integer)
+    Private Function buildChosenObjects(ByRef allObj As List(Of makeTMJson.tmObject), classeS$, methodS$) As List(Of Integer)
+        buildChosenObjects = New List(Of Integer)
         Dim c2W As New Collection
         Dim m2W As New Collection
 
-        c2W = CSVtoCOLL(classes)
-        m2W = CSVtoCOLL(methods)
+        c2W = CSVtoCOLL(classeS)
+        m2W = CSVtoCOLL(methodS)
 
         For Each MM In allMethods
             If grpNDX(m2W, MM.Name, False) Then
-                chosenObjects.Add(MM.graphId)
+                buildChosenObjects.Add(MM.graphId)
+                ' For Each userOfMethod In 
             End If
         Next
 
         For Each CC In codeContainers
             If grpNDX(c2W, CC.Name) Then
-                chosenObjects.Add(CC.graphId)
+                buildChosenObjects.Add(CC.graphId)
             End If
         Next
     End Function
@@ -463,6 +485,10 @@ Public Class appScan
             Do Until InStr(LOC, Chr(13)) = 0
                 'Console.WriteLine(Mid(LOC, 1, Len(LOC) - 1)) ' -1 to avoid extra LF
 
+                If Len(LTrim(LOC)) Then
+                    If Mid(LTrim(LOC), 1, 1) = "'" Then GoTo skipLineOfCode
+                End If
+
                 foundSomething = False
                 ' here 'FoundSomething' references anything that affects current object path
                 ' currscope manipulated appropriately
@@ -523,6 +549,7 @@ Public Class appScan
                         foundSomething = True
 
                         If Mid(LTrim(LOC), 1, 3) = "End" Or Mid(LTrim(LOC), 1, 3) = "New" Then
+                            'skipping NEW constructor
                             inMethod = False
                             currScope = removeScope(currScope)
                             GoTo skipMethLook
@@ -533,17 +560,12 @@ Public Class appScan
                         methParams = Mid(nameOfObj, InStr(nameOfObj, "("))
                         nameOfObj = Mid(nameOfObj, 1, InStr(nameOfObj, "(") - 1)
 
-                        ' block some here
-                        If nameOfObj = "New" Then
-                            'inMethod = False
-                            'GoTo skipMethLook  ' should figure out constructors
-                        End If
-
                         inMethod = True
 
                         'this is a new method
                         Dim newM As New Method
                         newM.Name = nameOfObj
+
                         newM.patH = noComma(currScope) + ",|METH|" + nameOfObj
                         If InStr(LTrim(LOC), "Function ") Then
                             newM.doesReturn = True
@@ -551,10 +573,23 @@ Public Class appScan
                         newM.Id = methodCounter.addOne()
                         newM.ofParent = noComma(currScope)
                         newM.sourceFilename = .fileName
-                        If InStr(LTrim(LOC), "Public ") Then
-                            newM.isPublic = True
+                        If Mid(methParams, 1, 2) <> "()" Then
+                            '      Dim stopherenow As Integer = 1
+                            ' Console.WriteLine(methParams)
+                            methParams = trimVal(methParams, "'") 'remove all up to the comment
+                            If newM.doesReturn Then
+                                Dim oI$ = returnOutsideObject(methParams)
+                                newM.returnType = Replace(oI, " As ", "")
+                                methParams = Mid(methParams, 1, InStr(methParams, oI) - 1)
+                            Else
+                                newM.returnType = ""
+                            End If
+                            newM.parametersExpected = returnInsideObjects(methParams)
                         End If
-                        newM.graphId = graphCounter.addOne
+                        If InStr(LTrim(LOC), "Public ") Then
+                                newM.isPublic = True
+                            End If
+                            newM.graphId = graphCounter.addOne
                         allMethods.Add(newM)
 
                         currScope = newM.patH
@@ -583,6 +618,8 @@ skipMethLook:
                     Dim M As CodeCollection = ofCodeCollection(currScope)
                     M.sourceLines.Add(LOC)
                 End If
+
+skipLineOfCode:
 
                 LOC = Mid(.linesOfCode, chrNum, InStr(Mid(.linesOfCode, chrNum), Chr(13)))
                 chrNum += Len(LOC) + 1
@@ -617,6 +654,7 @@ skipDebug:
 
 
     End Sub
+
     Private Sub scanCodeForClassMapping()
 
         For Each CC In codeContainers
@@ -663,18 +701,21 @@ skipDebug:
         Dim searchList As List(Of searchMethods)
         searchList = New List(Of searchMethods)
 
+        Dim classReferences As List(Of searchMethods) = New List(Of searchMethods)
+
         For Each CC In codeContainers
             For Each CR In CC.classRefs
-                With ofMethod(CR.classPath)
-                    Dim sM As New searchMethods
-                    sM.searchStr = CR.varName + "."
-                    sM.sourcePath = CR.classPath
-                    searchList.Add(sM)
-                    Dim sM2 As New searchMethods
-                    sM2.searchStr = CR.varName + "("
-                    sM2.sourcePath = CR.classPath
-                    searchList.Add(sM2)
-                End With
+                '                With ofMethod(CR.classPath)
+                Dim sM As New searchMethods
+                sM.searchStr = LCase(CR.varName)
+                sM.sourcePath = CR.classPath
+                If CR.isPublic = True Then sM.scopE = "" Else sM.scopE = CR.scopE
+                classReferences.Add(sM)
+                'Dim sM2 As New searchMethods
+                'sM2.searchStr = CR.varName + "("
+                'sM2.sourcePath = CR.classPath
+                'searchList.Add(sM2)
+                '               End With
             Next
         Next
 
@@ -685,6 +726,7 @@ skipDebug:
                 Dim sM As New searchMethods
                 sM.searchStr = MM.Name
                 sM.sourcePath = MM.patH
+                sM.scopE = MM.patH
                 searchList.Add(sM)
             End If
         Next
@@ -693,7 +735,7 @@ skipDebug:
         For Each CC In codeContainers
             For Each L In CC.sourceLines
                 'Console.WriteLine(L)
-                Dim cR As classInst = detectMethRef(L, searchList, CC.patH)
+                Dim cR As classInst = detectMethRef(L, searchList, classReferences, CC.patH)
                 If Len(cR.classPath) Then
                     cR.scopE = CC.patH
                     ' if Private, all objects of CLS or MOD can still use object
@@ -711,7 +753,8 @@ skipDebug:
         For Each MM In allMethods
             For Each L In MM.sourceLines
                 'Console.WriteLine(L)
-                Dim cR As classInst = detectMethRef(L, searchList, MM.patH)
+
+                Dim cR As classInst = detectMethRef(L, searchList, classReferences, MM.patH)
                 If Len(cR.classPath) Then
                     cR.scopE = MM.patH
                     ' a class created at method level only has scope to that method
@@ -733,7 +776,9 @@ skipDebug:
         ' this routine adds 1 (and only 1) mapping between objects per create/use/return as discovered
         If isDeclaration Then
             If inStrList(M.createsClasses, cR.classPath) = False Then
-                M.createsClasses.Add(cR.classPath)
+                'Console.WriteLine("Adding bridge from " + M.patH + " to " + cR.classPath)
+                ' this will add paths to classes created
+                ' M.createsClasses.Add(cR.classPath)
             End If
         Else
             If inStrList(M.usesMethods, cR.classPath) = False Then
@@ -827,6 +872,13 @@ checkMaybe:
         For Each CC In codeContainers
             If CC.ccType = "Class" Then
                 If maybeClass = CC.Name Then
+                    ' Console.WriteLine(L + vbCrLf + "Detected classref " + vName + " " + CC.patH)
+                    If vName = "Function" Then
+                        Dim getFuncName$ = Replace(Mid(L, InStr(L, "Function")), "Function", "")
+                        getFuncName = Trim(getFuncName)
+                        getFuncName = trimVal(getFuncName, "( ")
+                        vName = getFuncName
+                    End If
                     With detectClassRef
                         .classPath = CC.patH
                         .varName = vName
@@ -839,7 +891,30 @@ checkMaybe:
 foundIt:
     End Function
 
-    Private Function detectMethRef(L$, ByRef searchList As List(Of searchMethods), patH$) As classInst
+    Private Function isValidReference(ByRef cRefs As List(Of searchMethods), LOC$, possibleMethod$) As Boolean
+        isValidReference = False
+        Dim singleObj$ = ""
+
+        For Each S In cRefs
+            If InStr(LOC, S.searchStr) Then
+                singleObj = Mid(LOC, InStr(LOC, S.searchStr))
+                singleObj = trimVal(singleObj, " ")
+                ' singleObj being evaluated should be a single text object (no spaces)
+                If InStr(singleObj, "." + possibleMethod) Then
+                    ' short list here will include words that are subsets of method names
+                    ' eg
+                    ' ndxComp will register for class.ndxComp, class.ndxCompByName, class.ndxCompSomethingElse(
+                    Dim methodCall$ = Mid(singleObj, InStr(singleObj, ".") + 1)
+                    methodCall = trimVal(methodCall, "(")
+                    If methodCall = possibleMethod Then
+                        Return True
+                    End If
+                End If
+                End If
+        Next
+
+    End Function
+    Private Function detectMethRef(L$, ByRef searchList As List(Of searchMethods), ByRef classRefs As List(Of searchMethods), patH$) As classInst
 
         L = Trim(LCase(L))
         detectMethRef = New classInst
@@ -851,27 +926,48 @@ foundIt:
         Dim maybeMeth$ = ""
         Dim vName$ = ""
 
-        ' Console.WriteLine(L)
 
         For Each SL In searchList
             If patH = SL.sourcePath Then GoTo notthatone
             Dim S$ = ""
             S = LCase(SL.searchStr)
+            If InStr(L, S) = 0 Then GoTo notthatone
 
+            'Console.WriteLine(L + vbCrLf)
             ' if ends in "." or "(" then need to look for methods of class
 
-            If InStr(L, " " + S) Or Mid(L, 1, Len(S)) = S Then
+
+            If InStr(L, " " + S) Or Mid(L, 1, Len(S)) = S Or InStr(L, "(" + S + "(") Then
                 Dim a$ = Mid(L, InStr(L, S))
+
                 If InStr(Mid(a, 1, Len(S) + 1), S + "(") = 0 And InStr(Mid(a, 1, Len(S) + 1), S + " ") = 0 Then GoTo notthatone
 
+addThisOne:
                 'Console.WriteLine(S + " -> " + L)
                 With ofMethod(SL.sourcePath)
                     detectMethRef.classPath = .patH
                     detectMethRef.isPublic = .isPublic
                     detectMethRef.varName = SL.searchStr
                 End With
-notthatone:
+                'Console.WriteLine("MethRef identified - " + SL.searchStr)
+            Else
+
+
+                If isValidReference(classRefs, L, LCase(SL.searchStr)) = True Then
+                    With ofMethod(SL.sourcePath)
+                        detectMethRef.classPath = .patH
+                        detectMethRef.isPublic = .isPublic
+                        detectMethRef.varName = SL.searchStr
+                    End With
+
+                Else
+                    'Console.WriteLine("Passing this up (was looking at " + S + ")" + vbCrLf + L)
+
+                End If
+
+
             End If
+notthatone:
         Next
 
 checkMaybe:
@@ -915,12 +1011,20 @@ foundIt:
         '        "OutBoundId":[10],
         '        "OutBoundGuids":["31D863C7-8E0B-49F2-9363-539ED8E97E72"]
 
+        Public reportType As String
+        Private bestMethod As String
+        Private bestRMethod As String
+        Private bestCC As String
+        Private bestCL As String
+        Private bestSF As String
+
         Public Class tmObject
             Public ObjectId As Integer
             Public ObjectType As String
             Public ParentGroupId As Integer
             Public ComponentGuid As String
             Public Name As String
+            Public Notes As String
             Public OutBoundId As List(Of Integer)
             Public OutBoundGuids As List(Of String)
 
@@ -937,36 +1041,47 @@ foundIt:
             End Sub
         End Class
 
-        Private Function getTmObject(objId As Integer, objType$, objName$, parentId As Integer, Optional ByVal doesReturn As Boolean = False) As tmObject
+        Private Function getTmObject(objId As Integer, objType$, objName$, parentId As Integer, Optional ByVal doesReturn As Boolean = False, Optional Notes As String = "") As tmObject
 
             getTmObject = New tmObject
             With getTmObject
                 .Name = objName
                 .ObjectId = objId
                 .ParentGroupId = parentId
+                .Notes = Notes
                 If LCase(objType) = "method" Then .ObjectType = "Component" Else .ObjectType = "Container"
 
 
                 Select Case LCase(objType)
                     Case "method"
-                        .ComponentGuid = "deba4981-1f92-4b3b-94c3-e603a660aff4"
-                        If doesReturn Then .ComponentGuid = "4d954e6e-ac82-4e67-ba28-78538a30fd48"
+                        .ComponentGuid = bestMethod    ' "deba4981-1f92-4b3b-94c3-e603a660aff4"
+                        If doesReturn Then .ComponentGuid = bestRMethod     ' "4d954e6e-ac82-4e67-ba28-78538a30fd48"
                     Case "class"
-                        .ComponentGuid = "cb374e7d-fdc5-4f0a-a164-a82e52a1a6ca"
+                        .ComponentGuid = bestCL     ' "cb374e7d-fdc5-4f0a-a164-a82e52a1a6ca"
                     Case "module"
-                        .ComponentGuid = "9aec34ec-1715-431b-bc5e-e1ff40aa2b88"
+                        .ComponentGuid = bestCC ' "9aec34ec-1715-431b-bc5e-e1ff40aa2b88"
                     Case "file"
-                        .ComponentGuid = "1c912bfb-cc5a-495d-84f3-79fdd2441132"
+                        .ComponentGuid = bestSF      ' "1c912bfb-cc5a-495d-84f3-79fdd2441132"
                         .Name = stripToFilename(.Name)
                 End Select
             End With
         End Function
 
-        Public Function getJSONobjects(ByRef A As appScan, Optional ByVal classesOnly As Boolean = False, Optional ByVal onlyPublic As Boolean = False) As List(Of tmObject)
+        Private Sub assignGuids(ByRef A As appScan)
+            With A
+                If .bestMethod = "" Then bestMethod = "deba4981-1f92-4b3b-94c3-e603a660aff4" Else bestMethod = .bestMethod
+                If .bestRMethod = "" Then bestRMethod = "deba4981-1f92-4b3b-94c3-e603a660aff4" Else bestRMethod = .bestRMethod
+                If .bestCC = "" Then bestCC = "deba4981-1f92-4b3b-94c3-e603a660aff4" Else bestCC = .bestCC
+                If .bestCL = "" Then bestCL = "deba4981-1f92-4b3b-94c3-e603a660aff4" Else bestCL = .bestCL
+                If .bestSF = "" Then bestSF = "deba4981-1f92-4b3b-94c3-e603a660aff4" Else bestSF = .bestSF
+            End With
+        End Sub
+
+        Public Function getJSONobjects(ByRef A As appScan, Optional ByVal classesOnly As Boolean = False) As List(Of tmObject)
             ' bridge is either CREATE b2c9ccca-4c11-45ac-8b53-9a13577f2179
             ' or USE 3fa7bd26-7eb4-48c9-a6c5-b46b4a7e23cc
             ' or RETURN 6adacb2a-ae57-4efc-89ff-170d8fc5d5f1
-
+            Call assignGuids(A)
             Dim allObjects As List(Of tmObject) = New List(Of tmObject)
 
             'For Each CC In A.sourceFiles
@@ -983,14 +1098,13 @@ foundIt:
                     newGraphObj = getTmObject(CC2.graphId, CC2.ccType, CC2.Name, A.findGraphId(CC2.ofParents))
                     If newGraphObj.ParentGroupId = -1 Then newGraphObj.ParentGroupId = 0 'this is a file, as graphID of parent is not found
 
-                    If onlyPublic Then
-                        'If CC2.ccType = "Class" And CC2.isPublic = False Then GoTo skipMethods
-                        'Including all classes.. will have to work out scope
-                    End If
+                    'If onlyPublic Then
+                    'If CC2.ccType = "Class" And CC2.isPublic = False Then GoTo skipMethods
+                    'Including all classes.. will have to work out scope
+                    'End If
 
                     Call addOutboundConnections(A, newGraphObj, CC2.usesMethods, "")
-                    Call addOutboundConnections(A, newGraphObj, CC2.createsClasses, "b2c9ccca-4c11-45ac-8b53-9a13577f2179")
-
+                    Call addOutboundConnections(A, newGraphObj, CC2.createsClasses, "")
 
                     allObjects.Add(newGraphObj)
                 End If
@@ -1006,10 +1120,22 @@ foundIt:
                     Else
                         unqIDs.Add(MM.graphId)
                         Dim newGraphObj As New tmObject
-                        newGraphObj = getTmObject(MM.graphId, "method", MM.Name, A.findGraphId(MM.ofParent), MM.doesReturn)
+                        Dim noteS$ = ""
+
+
+                        If Len(MM.parametersExpected) Then
+                            noteS += "PARAMETERS:" + vbCr + Replace(MM.parametersExpected, ",", vbCr)
+                            noteS = Replace(noteS, "ByVal ", "")
+                            noteS = Replace(noteS, "ByRef ", "")
+                            noteS = Replace(noteS, " As ", "/")
+                            noteS = Replace(noteS, "Optional", "")
+                        End If
+                        If Len(MM.returnType) Then noteS += vbCr + vbCr + "RETURNS:" + vbCr + MM.returnType
+
+                        newGraphObj = getTmObject(MM.graphId, "method", MM.Name, A.findGraphId(MM.ofParent), MM.doesReturn, noteS)
 
                         Call addOutboundConnections(A, newGraphObj, MM.usesMethods, "")
-                        Call addOutboundConnections(A, newGraphObj, MM.createsClasses, "b2c9ccca-4c11-45ac-8b53-9a13577f2179")
+                        Call addOutboundConnections(A, newGraphObj, MM.createsClasses, "")
                         Call addOutboundConnections(A, newGraphObj, MM.returnsTo, "")
 
                         allObjects.Add(newGraphObj)
@@ -1082,32 +1208,37 @@ skipMethods:
         End Sub
 
         '            allFilteredObjects = buildSlices(allJsonObjects, classWatch, methodWatch)
-        Public Function buildSlice(ByRef allObj As List(Of tmObject), chosenObjects As List(Of Integer), Optional ByVal maxDepth As Integer = 0) As List(Of tmObject)
+        Public Function buildSlice(ByRef allObj As List(Of tmObject), chosenObjects As List(Of Integer), Optional ByVal maxDepth As Integer = 0, Optional ByVal showClients As Boolean = True) As List(Of tmObject)
             buildSlice = New List(Of tmObject)
             Dim newList As List(Of tmObject) = New List(Of tmObject)
 
             Dim toAdd As New List(Of tmObject)
+            Dim chosenList As New List(Of tmObject)
+
 
             ' add codecontainers only if needed by an object making it to slice
             ' determine need by observing all method parents - if they do not exist, add to list
 
             For Each O In allObj
                 If inIntList(chosenObjects, O.ObjectId) Then
-                    toAdd.Add(O)
+                    chosenList.Add(O)
                 End If
             Next
 
-            For Each newO In toAdd
+            For Each newO In chosenList
                 newList.Add(newO)
             Next
-            toAdd = New List(Of tmObject)
 
             Console.WriteLine("# of Objects Directly Named: " + newList.Count.ToString)
 
-            'now add all objects that call any of the methods
+skipInboundmap:
+
+
+            ' GoTo skipOutboundmap
+            'now add all objects called by any of the methods
             For Each adjO In newList
                 For Each oID In adjO.OutBoundId
-                    If ofTMobj(toAdd, oID).ObjectId = 0 Then
+                    If existsAsObject(toAdd, oID) = False Then
                         'Console.WriteLine("Adding ID " + oID.ToString + " " + ofTMobj(allObj, oID).Name)
                         toAdd.Add(ofTMobj(allObj, oID))
                     End If
@@ -1115,11 +1246,27 @@ skipMethods:
             Next
 
             For Each newO In toAdd
-                newList.Add(newO)
+                If existsAsObject(newList, newO.ObjectId) = False Then newList.Add(newO)
             Next
             toAdd = New List(Of tmObject)
 
-            Console.WriteLine("# with Adjacent Objects: " + newList.Count.ToString)
+            Console.WriteLine("# with outbound adjacent Objects: " + newList.Count.ToString)
+skipOutboundmap:
+
+            If showClients = True Then
+
+                'now add all objects calling existing methods
+                toAdd = whoIsUsing(chosenList, allObj)
+
+                For Each newO In toAdd
+                    If existsAsObject(newList, newO.ObjectId) = False Then newList.Add(newO)
+                Next
+                toAdd = New List(Of tmObject)
+
+                Console.WriteLine("# with inbound adjacent Objects: " + newList.Count.ToString)
+                'GoTo skipOutboundmap
+            End If
+
 
             'dont forget the parents
             Dim aPnum As Integer = 1
@@ -1165,11 +1312,10 @@ nextPhase:
 
             For Each obJ In newList
                 If obJ.OutBoundId.Count = 0 Then GoTo none2remove
-
                 'Console.WriteLine("Checking " + obJ.ObjectId.ToString + ":" + obJ.Name + "/" + obJ.OutBoundId.Count.ToString + " connections")
                 Dim K As Integer = 0
                 For K = obJ.OutBoundId.Count - 1 To 0 Step -1
-                    If ofTMobj(newList, obJ.OutBoundId(K)).ObjectId = 0 Then
+                    If existsAsObject(newList, obJ.OutBoundId(K)) = False Then
                         'Console.WriteLine((K + 1).ToString + "/" + obJ.OutBoundId.Count.ToString + " - REMOVING ID " + obJ.OutBoundId(K).ToString + " - NOT FOUND in current slice")
                         obJ.OutBoundId.RemoveAt(K)
                         obJ.OutBoundGuids.RemoveAt(K)
@@ -1207,10 +1353,48 @@ nextOne:
 
         End Function
 
+        Private Function existsAsObject(ByRef L As List(Of tmObject), objID As Integer) As Boolean
+            existsAsObject = False
+
+            If ofTMobj(L, objID).ObjectId Then existsAsObject = True
+            ' Console.WriteLine(CStr(existsAsObject))
+        End Function
+        Private Function whoIsUsing(ByRef sourceList As List(Of tmObject), ByRef crowdList As List(Of tmObject)) As List(Of tmObject)
+            whoIsUsing = New List(Of tmObject)
+
+            Dim isNeighbor As Boolean
+
+            For Each S In sourceList
+                For Each C In crowdList
+                    isNeighbor = False
+                    For Each oID In C.OutBoundId
+                        If oID = S.ObjectId Then isNeighbor = True
+                    Next
+                    If isNeighbor = True Then
+                        If existsAsObject(sourceList, C.ObjectId) = False Then
+                            If existsAsObject(whoIsUsing, C.ObjectId) = False Then
+                                whoIsUsing.Add(C)
+                            End If
+                        End If
+                    End If
+                Next
+            Next
+
+        End Function
+
         Private Function resolveConnections(ByRef allObj As List(Of tmObject), ByRef currSlice As List(Of tmObject)) As Integer
             ' returns number of objects added to slice
             resolveConnections = 0
             Dim toAdd As List(Of tmObject) = New List(Of tmObject)
+
+            ' don't do this.. brings in everything
+            ' toAdd = New List(Of tmObject)
+            ' toAdd = whoIsUsing(currSlice, allObj)
+            ' For Each obJ In toAdd
+            '     'Console.WriteLine(obJ.ObjectId.ToString + " - " + obJ.Name)
+            '     currSlice.Add(obJ)
+            ' Next
+            ' toAdd = New List(Of tmObject)
 
             For Each O In currSlice
                 If O.OutBoundId.Count Then
@@ -1219,10 +1403,10 @@ nextOne:
                         'Console.WriteLine("Evaluating currslice " + O.ObjectId.ToString + " - " + O.Name + " connection to " + O.OutBoundId(K).ToString)
                         If ofTMobj(currSlice, O.OutBoundId(K)).ObjectId = 0 Then
                             ' outbound connection does not exist.. add node
-                            If ofTMobj(toAdd, O.OutBoundId(K)).ObjectId = 0 Then
+                            If existsAsObject(toAdd, O.OutBoundId(K)) = False Then ' ofTMobj(toAdd, O.OutBoundId(K)).ObjectId = 0 Then
                                 resolveConnections += 1
                                 toAdd.Add(ofTMobj(allObj, O.OutBoundId(K))) ' 
-                                ' Console.WriteLine("Added " + ofTMobj(allObj, O.OutBoundId(K)).ObjectId.ToString + " - " + ofTMobj(allObj, O.OutBoundId(K)).Name)
+                                'Console.WriteLine("Added " + ofTMobj(allObj, O.OutBoundId(K)).ObjectId.ToString + " - " + ofTMobj(allObj, O.OutBoundId(K)).Name)
                             End If
                         End If
                     Next
@@ -1233,6 +1417,8 @@ nextOne:
                 'Console.WriteLine(obJ.ObjectId.ToString + " - " + obJ.Name)
                 currSlice.Add(obJ)
             Next
+
+
         End Function
 
         Private Function ofTMobj(ByRef allObj As List(Of tmObject), ByVal ObjId As Integer) As tmObject

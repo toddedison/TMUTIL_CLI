@@ -76,38 +76,83 @@ Module Program
                     Console.WriteLine("file does not exist " + fileN)
                 End If
 
-                Console.WriteLine(T.importKISSmodel(fileN, modelNum))
-                Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                Dim resP$ = T.importKISSmodel(fileN, modelNum)
+                If Mid(resP, 1, 5) = "ERROR" Then
+                    Console.WriteLine(resP)
+                Else
+                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End If
                 End
 
-            Case "appscan"
+                    Case "appscan"
                 Dim sDir$ = argValue("dir", args)
                 Dim block$ = argValue("block", args)
 
                 Dim publicOnly As Boolean = False
                 Dim classesOnly As Boolean = False
 
-                Dim showOnlyFiles$ = argValue("onlyfiles", args)
-                If Len(argValue("onlypublic", args)) Then
-                    If LCase(argValue("onlypublic", args)) = True Then publicOnly = True
-                End If
-                If Len(argValue("onlyclasses", args)) Then
-                    If LCase(argValue("onlyclasses", args)) = True Then classesOnly = True
-                End If
+                Dim modelType = argValue("type", args)
 
-                Dim methodsToWatch$ = argValue("watchmethod", args)
-                Dim classesToWatch$ = argValue("watchclass", args)
+                Dim showOnlyFiles$ = argValue("onlyfiles", args)
+                Dim showClients As Boolean = True
+                If LCase(argValue("showclients", args)) = "false" Then showClients = False
+
+                Dim objectsToWatch$ = argValue("objectwatch", args)
                 Dim maxdepth As Integer = Val(argValue("depth", args))
 
+                Call loadNTY(T, "Components")
+                Dim bestMethod As Integer = T.ndxCompbyName("Method")
+                Dim bestRMethod As Integer = T.ndxCompbyName("Return Method")
+                Dim bestCC As Integer = T.ndxCompbyName("Code Collection")
+                Dim bestCL As Integer = T.ndxCompbyName("Class")
+                Dim bestSF As Integer = T.ndxCompbyName("Source File")
 
-                Console.WriteLine("Scanning for classes and methods")
                 Dim nScan As New appScan
+
+                Console.WriteLine("Found AppScan Components:")
+                If bestMethod <> -1 Then
+                    Console.WriteLine("Method: " + T.lib_Comps(bestMethod).Guid.ToString)
+                    nScan.bestMethod = T.lib_Comps(bestMethod).Guid.ToString
+                Else
+                    Console.WriteLine("Cannot find component 'Method'")
+                    End
+                End If
+                If bestRMethod <> -1 Then
+                    Console.WriteLine("Return Method: " + T.lib_Comps(bestRMethod).Guid.ToString)
+                    nScan.bestRMethod = T.lib_Comps(bestRMethod).Guid.ToString
+                Else
+                    Console.WriteLine("Cannot find component 'Return Method'")
+                    End
+                End If
+                If bestCC <> -1 Then
+                    Console.WriteLine("Code Collection " + T.lib_Comps(bestCC).Guid.ToString)
+                    nScan.bestCC = T.lib_Comps(bestCC).Guid.ToString
+                Else
+                    Console.WriteLine("Cannot find component 'Code Collection'")
+                    End
+                End If
+                If bestCL <> -1 Then
+                    Console.WriteLine("Class " + T.lib_Comps(bestCL).Guid.ToString)
+                    nScan.bestCL = T.lib_Comps(bestCL).Guid.ToString
+                Else
+                    Console.WriteLine("Cannot find component 'Class'")
+                    End
+                End If
+                If bestSF <> -1 Then
+                    Console.WriteLine("Source File " + T.lib_Comps(bestSF).Guid.ToString)
+                    nScan.bestSF = T.lib_Comps(bestSF).Guid.ToString
+                Else
+                    Console.WriteLine("Cannot find component 'Source File'")
+                    End
+                End If
+
+                Console.WriteLine(vbCrLf + "Scanning for classes And methods")
                 Dim resulT1$ = ""
-                resulT1 = nScan.doScan(sDir, block, classesToWatch, methodsToWatch, showOnlyFiles, publicOnly, classesOnly, maxdepth)
+                resulT1 = nScan.doScan(sDir, block, objectsToWatch, LCase(modelType), showOnlyFiles, maxdepth, showClients)
 
                 If resulT1 = "ERROR" Or Dir(resulT1) = "" Then
                     Console.WriteLine("Unable to create JSON file")
-                    If Dir(resulT1) = "" Then Console.WriteLine("File not found: " + resulT1)
+                    If Dir(resulT1) = "" Then Console.WriteLine("File Not found: " + resulT1)
                     End
                 End If
 
@@ -124,10 +169,15 @@ Module Program
                     End
                 End If
 
-                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+                Console.WriteLine(vbCrLf + "Submitting JSON for import into Project #" + modelNum.ToString)
 
-                Console.WriteLine(T.importKISSmodel(resulT1, modelNum))
-                Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                Dim resP$ = T.importKISSmodel(resulT1, modelNum)
+                If Mid(resP, 1, 5) = "ERROR" Then
+                    Console.WriteLine(resP)
+                Else
+                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End If
+                'Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
                 End
 
             Case "summary"

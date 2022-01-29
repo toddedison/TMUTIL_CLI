@@ -515,6 +515,13 @@ errorcatch:
         importKISSmodel = ""
 
         Dim jSon$ = getAPIData("/api/import/" + projNum.ToString + "/Kis", True,,, fileN)
+
+        '    Dim stopHere As Integer = 1
+
+        If Mid(jSon, 1, 5) = "ERROR" Then
+            Return jSon
+        End If
+
         Return "Action Completed"
     End Function
 

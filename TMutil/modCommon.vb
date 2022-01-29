@@ -89,6 +89,55 @@ Module modCommon
 
     End Function
 
+    Public Function allTextAfter(ByVal a$, Optional ByVal stopChr$ = "(") As String
+        allTextAfter = ""
+        Dim b$ = ""
+        Dim newS$ = ""
+
+        Dim addChars As Boolean = False
+
+        For K = 1 To Len(a)
+            b$ = Mid(a, K, 1)
+            If b$ <> stopChr Then
+                If addChars = True Then newS += b
+            Else
+                If addChars = True Then newS += b
+                addChars = True
+            End If
+        Next
+
+        Return newS
+    End Function
+    Public Function returnInsideObjects(ByVal a$) As String
+        ' something something here (inside objects, whatever(is here)) as something
+        ' becomes inside objects, whatever(is here)
+        returnInsideObjects = ""
+        Dim b$ = ""
+
+        b$ = allTextAfter(a)
+        b$ = StrReverse(b)
+        b = allTextAfter(b, ")")
+
+        Return StrReverse(b)
+    End Function
+
+    Public Function numLayersOfString(ByVal a$) As Integer
+        Return countChars(a, "(")
+    End Function
+
+    Public Function returnInnerObjects(ByVal a$, Optional ByVal depth As Integer = 1) As String
+
+    End Function
+
+    Public Function returnOutsideObject(ByVal a$) As String
+        returnOutsideObject = ""
+
+        If InStr(a, ") As ") = 0 Then
+            Return ""
+        End If
+
+        Return Mid(a, InStr(a, ") As ") + 1)
+    End Function
     Public Function jsonGetNear(ByVal bigString$, ByVal searchStr$, findKey$) As String
         ' look in big string for search str.. Once found, trim to { before search str to } after - then find findKey and return value.
         jsonGetNear = ""
