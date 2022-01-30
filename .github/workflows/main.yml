@@ -35,8 +35,7 @@ jobs:
       - name: Unzip CLI
         run: Expand-Archive -LiteralPath tm_runfiles.zip -DestinationPath .\tmrunfiles
 
-      # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
-        run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+      - name: Test CLI
+        run: .\tmrunfiles\tmutil show_comp
+        
+
