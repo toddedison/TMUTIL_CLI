@@ -30,9 +30,7 @@ jobs:
         run: sudo apt-get install -y dotnet-runtime-6.0
 
       - name: Getting TM CLI
-        uses: wei/curl@master
-        with:
-           args: -O https://www.dropbox.com/s/eburax0kv59bzln/tmcli_runfiles.zip?dl=0
+        run: curl https://www.dropbox.com/s/eburax0kv59bzln/tmcli_runfiles.zip --output tmcli_runfiles.zip
     
       - name: Unzip CLI
         run: unzip -o tmcli_runfiles.zip
