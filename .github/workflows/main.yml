@@ -37,6 +37,5 @@ jobs:
 
       - name: Test CLI
         working-directory: .\tmrunfiles
-        run: .\tmutil show_comp
+        run: .\tmutil appscan --dir C:\Users\micha\source\repos\TMCLI\TMutil --block "designer,my project,assemblyinfo" --objectwatch buildcompobj --type methodmap --modelname github_action --depth 1 --showclients true
         
-
