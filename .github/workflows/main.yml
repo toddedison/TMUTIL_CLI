@@ -37,6 +37,7 @@ jobs:
 
       - name: Navigate to CLI Directory
         run: cd .\tmrunfiles
+             .\tmutil show_comp
 
       - name: DIR
         run: dir
