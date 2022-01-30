@@ -35,14 +35,8 @@ jobs:
       - name: Unzip CLI
         run: Expand-Archive -LiteralPath tm_runfiles.zip -DestinationPath .\tmrunfiles
 
-      - name: Navigate to CLI Directory
-        run: cd .\tmrunfiles
-             .\tmutil show_comp
-
-      - name: DIR
-        run: dir
-
       - name: Test CLI
+        working-directory: .\tmrunfiles
         run: .\tmutil show_comp
         
 
