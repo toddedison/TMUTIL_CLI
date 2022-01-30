@@ -30,7 +30,7 @@ jobs:
 #        run: sudo apt-get install -y dotnet-runtime-6.0
 
       - name: Getting TM CLI
-        run: curl https://www.dropbox.com/s/vkslkvt17mnmum5/tm_runfiles.zip --output tm_runfiles.zip
+        run: Invoke-WebRequest -Uri https://www.dropbox.com/s/vkslkvt17mnmum5/tm_runfiles.zip -OutFile tm_runfiles.zip
     
       - name: Unzip CLI
         run: Expand-Archive -LiteralPath tm_runfiles.zip -DestinationPath \tmrunfiles
