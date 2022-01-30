@@ -38,6 +38,9 @@ jobs:
       - name: Navigate to CLI Directory
         run: cd .\tmrunfiles
 
+      - name: DIR
+        run: dir
+
       - name: Test CLI
         run: .\tmutil show_comp
         
