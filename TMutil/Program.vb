@@ -138,6 +138,9 @@ Module Program
                     Console.WriteLine("Cannot find component 'Class'")
                     End
                 End If
+
+                'some change here
+
                 If bestSF <> -1 Then
                     '               Console.WriteLine("Source File " + T.lib_Comps(bestSF).Guid.ToString)
                     nScan.bestSF = T.lib_Comps(bestSF).Guid.ToString
