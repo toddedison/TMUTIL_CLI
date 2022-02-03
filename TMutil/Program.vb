@@ -109,44 +109,44 @@ Module Program
 
                 Dim nScan As New appScan
 
-                Console.WriteLine("Found AppScan Components:")
+                '                Console.WriteLine("Found AppScan Components:")
                 If bestMethod <> -1 Then
-                    Console.WriteLine("Method: " + T.lib_Comps(bestMethod).Guid.ToString)
+                    '                   Console.WriteLine("Method: " + T.lib_Comps(bestMethod).Guid.ToString)
                     nScan.bestMethod = T.lib_Comps(bestMethod).Guid.ToString
                 Else
                     Console.WriteLine("Cannot find component 'Method'")
                     End
                 End If
                 If bestRMethod <> -1 Then
-                    Console.WriteLine("Return Method: " + T.lib_Comps(bestRMethod).Guid.ToString)
+                    '                  Console.WriteLine("Return Method: " + T.lib_Comps(bestRMethod).Guid.ToString)
                     nScan.bestRMethod = T.lib_Comps(bestRMethod).Guid.ToString
                 Else
                     Console.WriteLine("Cannot find component 'Return Method'")
                     End
                 End If
                 If bestCC <> -1 Then
-                    Console.WriteLine("Code Collection " + T.lib_Comps(bestCC).Guid.ToString)
+                    '                 Console.WriteLine("Code Collection " + T.lib_Comps(bestCC).Guid.ToString)
                     nScan.bestCC = T.lib_Comps(bestCC).Guid.ToString
                 Else
                     Console.WriteLine("Cannot find component 'Code Collection'")
                     End
                 End If
                 If bestCL <> -1 Then
-                    Console.WriteLine("Class " + T.lib_Comps(bestCL).Guid.ToString)
+                    '                Console.WriteLine("Class " + T.lib_Comps(bestCL).Guid.ToString)
                     nScan.bestCL = T.lib_Comps(bestCL).Guid.ToString
                 Else
                     Console.WriteLine("Cannot find component 'Class'")
                     End
                 End If
                 If bestSF <> -1 Then
-                    Console.WriteLine("Source File " + T.lib_Comps(bestSF).Guid.ToString)
+                    '               Console.WriteLine("Source File " + T.lib_Comps(bestSF).Guid.ToString)
                     nScan.bestSF = T.lib_Comps(bestSF).Guid.ToString
                 Else
                     Console.WriteLine("Cannot find component 'Source File'")
                     End
                 End If
 
-                Console.WriteLine(vbCrLf + "Scanning for classes And methods")
+                Console.WriteLine("Scanning for classes And methods")
                 Dim resulT1$ = ""
                 resulT1 = nScan.doScan(sDir, block, objectsToWatch, LCase(modelType), showOnlyFiles, maxdepth, showClients)
 
