@@ -141,6 +141,10 @@ Module Program
 
                 'some change here
 
+
+                ' some other change
+
+
                 If bestSF <> -1 Then
                     '               Console.WriteLine("Source File " + T.lib_Comps(bestSF).Guid.ToString)
                     nScan.bestSF = T.lib_Comps(bestSF).Guid.ToString
