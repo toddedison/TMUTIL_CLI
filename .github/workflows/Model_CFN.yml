@@ -1,0 +1,37 @@
+name: CFN -> ThreatModel
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v2
+
+      # Define Arguments for Modeling
+      - name: Set CFT Filename (Master, if Nested)
+        run: echo '::set-output name=FILENAME::D:\a\TMCLI\TMCLI\TMutil\bin\Debug\netcoreapp3.1\cfn_complex.json'
+        id: filename
+
+      - name: Set ThreatModel Name
+        run: echo '::set-output name=MODELNAME::GitHubAction_CFN_Complex'
+        id: modelname
+
+      # Get the CLI and run it
+      - name: Download/Unzip TM CLI
+        run: |
+          Invoke-WebRequest -Uri "https://drive.google.com/uc?export=download&id=1OMta5N9ZjMqPfP9xOsZU0O8-GjXXmyQv" -OutFile tm_runfiles.zip
+          Expand-Archive -LiteralPath tm_runfiles.zip -DestinationPath .\tmrunfiles
+
+      - name: Create Threat Model
+        working-directory: .\tmrunfiles
+        run: .\tmutil submitcfn --modelname ${{ steps.modelname.outputs.MODELNAME }} --file ${{ steps.filename.outputs.FILENAME }}
+        
