@@ -84,7 +84,38 @@ Module Program
                 End If
                 End
 
-                    Case "appscan"
+
+            Case "submitcfn"
+                Dim modelName$ = argValue("modelname", args)
+                modelName = Now.Ticks.ToString + modelName
+
+                Dim modelNum As Integer
+                Dim result2$ = T.createKISSmodelForImport(modelName)
+                modelNum = Val(result2)
+                If modelNum = 0 Then
+                    Console.WriteLine("Unable to create project - " + result2)
+                    End
+                End If
+
+                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                End If
+
+                Dim resP$ = T.importKISSmodel(fileN, modelNum, "CloudFormation")
+                If Mid(resP, 1, 5) = "ERROR" Then
+                    Console.WriteLine(resP)
+                Else
+                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End If
+                End
+
+
+
+
+            Case "appscan"
                 Dim sDir$ = argValue("dir", args)
                 Dim block$ = argValue("block", args)
 
@@ -3367,6 +3398,29 @@ nextItem3:
 
                 End
 
+            Case "apply_byrnes"
+                loadNTY(T, "Components")
+                loadNTY(T, "SecurityRequirements")
+                T.librarieS = T.getLibraries()
+
+                For Each C In T.lib_Comps
+                    If C.LibraryId = 89 Then
+                        With C
+                            Console.WriteLine("COMP  : " + .CompName + " [" + .CompID.ToString + "]      Library " + .LibraryId.ToString)
+                            Console.WriteLine("LABELS: " + .Labels)
+                        End With
+                    End If
+                Next
+                For Each S In T.lib_SR
+                    If S.LibraryId = 89 Then 'And InStr(S.Description, "Description") Then
+                        With S
+                            Console.WriteLine("SR  : " + .Name + " [" + .Id.ToString + "]      Library " + .LibraryId.ToString)
+                            Console.WriteLine("LABELS: " + .Labels)
+                            If InStr(S.Description, "<b>Description:</b><div>") Then Console.WriteLine(.Description)
+                        End With
+                    End If
+                Next
+                End
 
 
             Case "addcomp_comp" ', "addcomp_comp"

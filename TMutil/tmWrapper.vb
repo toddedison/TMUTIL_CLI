@@ -479,7 +479,7 @@ errorcatch:
 
     End Sub
 
-    Public Function createKISSmodelForImport(modelName$, Optional ByVal riskId As Integer = 1, Optional ByVal versioN As Integer = 1, Optional ByVal labelS$ = "", Optional ByVal modelType$ = "Others") As String
+    Public Function createKISSmodelForImport(modelName$, Optional ByVal riskId As Integer = 1, Optional ByVal versioN As Integer = 1, Optional ByVal labelS$ = "", Optional ByVal modelType$ = "Others", Optional ByVal importType$ = "Kis") As String
         '{"Id":0,
         '"Name""test_meth_inst2",
         '"RiskId":1,"Labels":"",
@@ -511,10 +511,12 @@ errorcatch:
         Return jSon
     End Function
 
-    Public Function importKISSmodel(fileN$, projNum As Integer) As String
+    Public Function importKISSmodel(fileN$, projNum As Integer, Optional ByVal integrationType$ = "Kis") As String
         importKISSmodel = ""
 
-        Dim jSon$ = getAPIData("/api/import/" + projNum.ToString + "/Kis", True,,, fileN)
+
+
+        Dim jSon$ = getAPIData("/api/import/" + projNum.ToString + "/" + integrationType, True,,, fileN)
 
         '    Dim stopHere As Integer = 1
 
