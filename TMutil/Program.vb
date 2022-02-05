@@ -115,6 +115,7 @@ Module Program
 
 
 
+
             Case "appscan"
                 Dim sDir$ = argValue("dir", args)
                 Dim block$ = argValue("block", args)
