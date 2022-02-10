@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "appscan --dir C:\\Users\\micha\\source\\repos\\TMCLI\\TMutil --block \"designer,my project,assemblyinfo\" --objectwatch buildcompobj --type clients --modelname test_clients --depth 1"
+      "commandLineArgs": "apply_byrne"
     }
   }
 }

@@ -825,6 +825,37 @@ errorcatch:
 
     End Function
 
+    Public Function editCOMP(C As tmComponent, Optional actioNtypE$ = "TF_COMPONENT_UPDATED", Optional overrideLIB As Integer = 0, Optional overrideCTYPE As Integer = 0, Optional overrideCTname$ = "") As Boolean
+        editCOMP = False
+        Dim P As New addCompClass
+
+        With C
+            '            .ImagePath = C.ImagePath '"/ComponentImage/DefaultComponent.jpg"
+            If overrideCTYPE Then .ComponentTypeId = overrideCTYPE.ToString Else .ComponentTypeId = C.ComponentTypeId.ToString
+            '           .RiskId = 1
+            '          .CodeTypeId = 1
+            '         .DataClassificationId = 1
+            .Name = C.Name
+            If overrideCTYPE Then .ComponentTypeName = overrideCTname Else .ComponentTypeName = C.ComponentTypeName
+            .Labels = C.Labels
+            '        If overrideLIB Then .LibrayId = overrideLIB Else .LibrayId = C.LibraryId
+            .Description = C.Description
+        End With
+
+        With P
+            If overrideLIB Then .LibraryId = overrideLIB Else .LibraryId = C.LibraryId
+            .EntityType = "Components"
+            .Model = JsonConvert.SerializeObject(C)
+            .ActionType = actioNtypE
+            .IsCopy = False
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/threatframework/componentmaster/addedit", True, jBody, True)
+
+        If InStr(json, "true") Then editCOMP = True
+
+    End Function
     Public Function threatsOfEntity(C As Object, ntyType$) As List(Of tmProjThreat)
         threatsOfEntity = New List(Of tmProjThreat)
         Dim cResp As New tmCompQueryResp

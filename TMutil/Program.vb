@@ -3399,25 +3399,70 @@ nextItem3:
 
                 End
 
-            Case "apply_byrnes"
+            Case "apply_byrne"
                 loadNTY(T, "Components")
                 loadNTY(T, "SecurityRequirements")
                 T.librarieS = T.getLibraries()
 
                 For Each C In T.lib_Comps
-                    If C.LibraryId = 89 Then
+                    If C.LibraryId = 88 Or C.LibraryId = 89 Then
                         With C
-                            Console.WriteLine("COMP  : " + .CompName + " [" + .CompID.ToString + "]      Library " + .LibraryId.ToString)
-                            Console.WriteLine("LABELS: " + .Labels)
+                            'Console.WriteLine("NEW LABELS COMP  : " + .CompName + " [" + .CompID.ToString + "]      Library " + .LibraryId.ToString)
+                            'Console.WriteLine("LABELS: " + .Labels)
+                            Dim newLabels$ = ""
+                            If Mid(C.Labels, 1, 6) <> "Contai" Then
+                                newLabels = "Containerization" + "," + .Labels
+                            Else
+                                newLabels = .Labels
+                            End If
+                            newLabels = Replace(newLabels, "kube-apiserver", "K8s - API Server")
+                            newLabels = Replace(newLabels, "kubelet", "K8s - Kubelet")
+                            newLabels = Replace(newLabels, "kube-scheduler", "K8s - Scheduler")
+                            newLabels = Replace(newLabels, "kube-workernode-config", "K8s - Node")
+
+                            If Mid(newLabels, Len(newLabels), 1) = "," Then newLabels = Mid(newLabels, 1, Len(newLabels) - 1)
+
+                            If newLabels <> .Labels Then
+                                C.Labels = newLabels
+                                Console.WriteLine(.CompName + " [" + .CompID.ToString + "] -> " + newLabels + ": " + T.editCOMP(C, "TF_COMPONENT_UPDATED").ToString)
+                            End If
                         End With
                     End If
                 Next
+
                 For Each S In T.lib_SR
-                    If S.LibraryId = 89 Then 'And InStr(S.Description, "Description") Then
+                    If S.LibraryId = 88 Or S.LibraryId = 89 Then 'And InStr(S.Description, "Description") Then
+                        Dim editSR As Boolean = False
                         With S
-                            Console.WriteLine("SR  : " + .Name + " [" + .Id.ToString + "]      Library " + .LibraryId.ToString)
-                            Console.WriteLine("LABELS: " + .Labels)
-                            If InStr(S.Description, "<b>Description:</b><div>") Then Console.WriteLine(.Description)
+                            'Console.WriteLine("SR  : " + .Name + " [" + .Id.ToString + "]      Library " + .LibraryId.ToString)
+                            'Console.WriteLine("LABELS: " + .Labels)
+                            If InStr(S.Description, "<b>Description:</b><div>") Then
+                                S.Description = Replace(S.Description, "<b>Description:</b><div>", "")
+                                'console.writeline("New description")
+                                editSR = True
+                            End If
+
+                            Dim newLabels$ = ""
+                            If Mid(S.Labels, 1, 6) <> "Contai" Then
+                                newLabels = "Containerization" + "," + .Labels
+                            Else
+                                newLabels = .Labels
+                            End If
+
+                            If InStr(newLabels, "kube-apiserver") Then
+                                Dim stopHere As Integer = 1
+
+                            End If
+                            newLabels = Replace(newLabels, "kube-apiserver", "K8s - API Server")
+                            newLabels = Replace(newLabels, "kubelet", "K8s - Kubelet")
+                            newLabels = Replace(newLabels, "kube-scheduler", "K8s - Scheduler")
+                            newLabels = Replace(newLabels, "kube-workernode-config", "K8s - Node")
+
+                            If newLabels <> .Labels Then editSR = True
+                            If editSR = True Then
+                                S.Labels = newLabels
+                                Console.WriteLine(.Name + " [" + .Id.ToString + "] -> " + newLabels + ": " + T.addEditSR(S)) '(C, "TF_COMPONENT_UPDATED").ToString)
+                            End If
                         End With
                     End If
                 Next
@@ -5298,11 +5343,11 @@ skipComp2:
         Console.WriteLine(fLine("subthreat_sr", "Remove a Security Requirement from a Threat, use arg: --ID (threat ID) --SRID (SR ID)"))
         Console.WriteLine(fLine("addcomp_comp", "text"))
 
-        Console.WriteLine(vbCrLf + "Instance-to-Instance" + vbCrLf + "==============================")
+        Console.WriteLine(vbCrLf + "Instance-to-Instance (use param --I2 (fqdn) for all calls)" + vbCrLf + "=================================================")
         Console.WriteLine(fLine("i2i_threatloop_addsr", "text"))
         Console.WriteLine(fLine("i2i_attrloop_addattr", "text"))
         Console.WriteLine(fLine("i2i_attrloop_addth", "text"))
-        Console.WriteLine(fLine("i2i_clonecomp", "text"))
+        Console.WriteLine(fLine("i2i_clonecomp", "Deep clone - component and all associated Threats/SRs added as necessary, use either --LIBRARY (lib name), or --ID, --NAME (component)"))
         Console.WriteLine(fLine("i2i_comploop_addth", "text"))
         Console.WriteLine(fLine("i2i_comploop_addattr", "text"))
         Console.WriteLine(fLine("i2i_sql_clean_roles_elements_widgets", "text"))
@@ -5310,17 +5355,17 @@ skipComp2:
         Console.WriteLine(fLine("i2i_sql_libs", "text"))
         Console.WriteLine(fLine("template_convert", "text"))
         Console.WriteLine(fLine("i2i_bestmatch", "text"))
-        Console.WriteLine(fLine("i2i_allcomp_compare", "text"))
-        Console.WriteLine(fLine("i2i_allsr_compare", "text"))
-        Console.WriteLine(fLine("i2i_add_comps", "text"))
-        Console.WriteLine(fLine("i2i_add_srs", "text"))
-        Console.WriteLine(fLine("i2i_add_threats", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_compare", "Deep discovery of differences between instances"))
+        Console.WriteLine(fLine("i2i_allsr_compare", "Deep discovery of differences between instances"))
+        Console.WriteLine(fLine("i2i_add_comps", "Adds every Component from default instance to i2, use arg: --I2 (fqdn_of_target)"))
+        Console.WriteLine(fLine("i2i_add_srs", "Adds every SR from default instance to i2, use arg: --I2 (fqdn_of_target)"))
+        Console.WriteLine(fLine("i2i_add_threats", "Adds every Threat from default instance to i2, use arg: --I2 (fqdn_of_target)"))
         Console.WriteLine(fLine("i2i_allcomp_loop", "text"))
         Console.WriteLine(fLine("i2i_entitylib_sql", "text"))
         Console.WriteLine(fLine("i2i_allsr_loop", "text"))
         Console.WriteLine(fLine("i2i_allthreat_loop", "text"))
-        Console.WriteLine(fLine("i2i_allcomp_update", "text"))
-        Console.WriteLine(fLine("i2i_comp_compare", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_update", "Shows differences in components between 2 instances (update testing)"))
+        Console.WriteLine(fLine("i2i_comp_compare", "Shows difference in a single component across instances, use --ID or --NAME (component)"))
 
 
     End Sub
