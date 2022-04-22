@@ -215,6 +215,23 @@ Public Class TM_Client
         Return TF
     End Function
 
+    Public Function updateThreatStat(T As threatStatusUpdate) As String
+        updateThreatStat = ""
+
+        Dim jBody$ = ""
+        jBody = JsonConvert.SerializeObject(T)
+
+        Return jBody
+
+        Exit Function
+
+        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+
+        ' TF = JsonConvert.DeserializeObject(Of List(Of tmMiscTrigger))(jsoN)
+
+        ' Return TF
+    End Function
+
 
     Public Function getGroups() As List(Of tmGroups)
         getGroups = New List(Of tmGroups)
@@ -338,6 +355,18 @@ errorcatch:
 
         Return TF
     End Function
+
+
+    Public Function getCompFrameworks() As List(Of complianceDetails)
+        Dim TF As New List(Of complianceDetails)
+
+        Dim jsoN$ = getAPIData("/api/scf/complianceframeworks/false")
+
+        TF = JsonConvert.DeserializeObject(Of List(Of complianceDetails))(jsoN)
+
+        Return TF
+    End Function
+
 
     Public Function getTFAttr(T As tfRequest) As List(Of tmAttribute)
         Dim TF As New List(Of tmAttribute)
@@ -1411,8 +1440,12 @@ skipTheLoad:
             'here we get the transitive SRs
             ndxTH = ndxTHlib(T.Id) ', lib_TH)
 
+            If ndxTH = -1 Then
+                Console.WriteLine("WARNING - DB ERROR: Threat has been assigned that no longer exists: " + O.Threats(K).Name + " [" + O.Threats(K).Id.ToString + "]")
+                GoTo skipTheLoad
+            End If
 
-                    If lib_TH(ndxTH).isBuilt = True Then
+            If lib_TH(ndxTH).isBuilt = True Then
                 ' added doevents as this seems to trip// suspect lowlevel probs with isBuilt prop
                 'this seems to happen a lot
                 'if we already know SRs, just add them from coll and skip web request
@@ -1475,9 +1508,9 @@ duplicate:
                         Next
                     End With
 skipTheLoad:
-                    lib_TH(ndxTH).isBuilt = True
+            If ndxTH <> -1 Then lib_TH(ndxTH).isBuilt = True
 
-                Next
+        Next
 
 
 
@@ -2286,6 +2319,38 @@ Public Class tfRequest
     Public ShowHidden As Boolean
 End Class
 
+Public Class threatStatusUpdate
+    Public Id As Long
+    Public ThreatId As Long
+    Public ProjectId As Long
+    Public StatusId As Integer
+End Class
+Public Class complianceDetails
+    Public Id As Integer
+    Public Name As String
+    Public Sections As List(Of compSection)
+
+    Public Sub New()
+        Sections = New List(Of compSection)
+    End Sub
+End Class
+
+Public Class compSection
+    Public Id As Integer
+    Public Name As String
+    Public Title As String
+    Public Domain As String
+    Public SecurityRequirements As List(Of compSRs)
+    Public Sub New()
+        SecurityRequirements = New List(Of compSRs)
+    End Sub
+End Class
+
+Public Class compSRs
+    Public Id As Integer
+    Public Name As String
+End Class
+
 Public Class tmAWSacc
     Public Id As Long
     Public Name$
@@ -2371,10 +2436,13 @@ Public Class tmProjInfo
     Public Version$
     'Public Guid As System.Guid
     Public isInternal As Boolean
+    Public Labels As String
+    Public CreateDate As DateTime
     Public RiskId As Integer
     Public RiskName$
     Public CreatedByName$
     Public LastModifiedByName$
+    Public LastModifiedDate As DateTime
     'Public RiskName As Integer
     Public [Type] As String
     Public CreatedByUserEmail$

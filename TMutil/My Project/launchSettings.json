@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "apply_byrne"
+      "commandLineArgs": "show_comp"
     }
   }
 }

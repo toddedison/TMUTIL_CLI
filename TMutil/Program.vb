@@ -16,11 +16,11 @@ Module Program
             End
         End If
 
-        If actionWord = "makelogin" Then
-            Dim fqD$ = argValue("fqdn", args)
-            Dim usR$ = argValue("un", args)
-            Dim pwD$ = argValue("pw", args)
+        Dim fqD$ = argValue("fqdn", args)
+        Dim usR$ = argValue("un", args)
+        Dim pwD$ = argValue("pw", args)
 
+        If actionWord = "makelogin" Then
             If fqD = "" Or usR = "" Or pwD = "" Then
                 Console.WriteLine("Must provide all 3 arguments: FQDN, UN and PW")
             End If
@@ -32,18 +32,26 @@ Module Program
         End If
 
         Dim lgnS = getLogins()
-        If lgnS.Count = 0 Then
-            Console.WriteLine("Make sure you have a login file - the first entry will be used to log in")
+        If lgnS.Count = 0 And fqD + usR + pwD = "" Then
+            Console.WriteLine("Make sure you have a login file or specify FQDN,UN,PW - with login file, the first entry will be used to log in")
             End
         End If
 
-        Dim uN$ = loginItem(lgnS(1), 1)
-        Dim pW$ = loginItem(lgnS(1), 2)
-        Dim fqdN$ = "https://" + loginItem(lgnS(1), 0) ', "")
-
+        If fqD + usR + pwD = "" Then
+            usR = loginItem(lgnS(1), 1)
+            pwD = loginItem(lgnS(1), 2)
+            fqD = "https://" + loginItem(lgnS(1), 0) ', "")
+        Else
+            fqD = "https://" + fqD
+        End If
         '''''''' Console.WriteLine(uN + "|" + pW)
 
-        T = New TM_Client(fqdN, uN, pW)
+        If fqD <> "" And lgnS.Count Then
+            ' user providing FQDN but not credentials - look to file
+            T = returnTMClient(fqD)
+        Else
+            T = New TM_Client(fqD, usR, pwD)
+        End If
 
         If T.isConnected = True Then
             '            addLoginCreds(fqdN, uN, pW)
@@ -57,9 +65,62 @@ Module Program
         Dim GRP As List(Of tmGroups)
 
         Select Case LCase(actionWord)
+            Case "compliance_csv"
+                Dim cFrameworks As List(Of complianceDetails) = T.getCompFrameworks
+
+                Dim filterS$ = argValue("framework", args)
+                Dim fileN$ = argValue("file", args)
+                Dim FF As Integer
+
+                If Len(fileN) Then
+                    safeKILL(fileN)
+                    FF = FreeFile()
+                    Call loadNTY(T, "SecurityRequirements")
+                    FileOpen(FF, fileN, OpenMode.Output)
+                End If
+
+                Dim c$ = Chr(34)
+
+                For Each F In cFrameworks
+                    If Len(filterS) Then
+                        If LCase(F.Name) <> LCase(filterS) Then GoTo skipIt
+                    End If
+
+                    If Len(fileN) Then
+                        '                        WriteLine()
+                    Else
+                        Console.WriteLine(col5CLI(F.Name + " [" + F.Id.ToString + "]", "", "", ""))
+                    End If
+                    For Each S In F.Sections
+                        If Len(fileN) Then
+                            Dim newLine$ = F.Id.ToString + "," + c + F.Name + c + ","
+                            Dim cFam$ = S.Domain
+                            If InStr(LCase(F.Name), "nist") Then cFam = Mid(S.Name, 1, 2)
+
+                            newLine += c + cFam + c + "," + S.Id.ToString + "," + c + S.Name + c + "," + c + S.Title + c + ","
+
+                            For Each SR In S.SecurityRequirements
+                                Dim srName$ = "UNDEFINED"
+                                srName = T.lib_SR(T.ndxSRlib(SR.Id)).Name
+                                Print(FF, newLine + SR.Id.ToString + "," + c + srName + c + ",1" + vbCrLf)
+                            Next
+                        Else
+                                Console.WriteLine(col5CLI("", S.Name + " [" + S.Id.ToString + "]", S.Title, "   ", S.SecurityRequirements.Count.ToString))
+                        End If
+                    Next
+skipIt:
+                Next
+
+                If Len(fileN) Then FileClose(FF)
+                End
+
+
             Case "submitkiss"
                 Dim modelName$ = argValue("modelname", args)
-                modelName = Now.Ticks.ToString + modelName
+                If modelName = "" Then
+                    Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
 
                 Dim modelNum As Integer
                 Dim result2$ = T.createKISSmodelForImport(modelName)
@@ -197,8 +258,12 @@ Module Program
 
 
 
-                Dim modelName$ = argValue("modelname", args)
-                modelName = Now.Ticks.ToString + modelName
+                Dim modelName$ = Now.Ticks.ToString + "_" + argValue("modelname", args)
+                If modelName = "" Then
+                    Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
+                '                modelName = Now.Ticks.ToString + modelName
 
                 Dim modelNum As Integer
                 Dim result2$ = T.createKISSmodelForImport(modelName)
@@ -224,6 +289,111 @@ Module Program
                 End
 
 
+            Case "fix_templates"
+                Dim fileN$ = argValue("file", args)
+                Dim outF$ = argValue("fileout", args)
+
+                If Dir(fileN) = "" Or fileN = "" Then
+                    Console.WriteLine("Use --FILE to specify filename of CSV containing templates")
+                    End
+                End If
+
+                If outF = "" Then
+                    Console.WriteLine("Use --FILEOUT to specify filename of SQL output")
+                End If
+
+                Dim nextLine$ = ""
+                Dim getLine$ = ""
+                Dim FF As Integer = 0
+                Dim FN As Integer = 0
+                FF = FreeFile()
+
+                FileOpen(FF, fileN, OpenMode.Input)
+
+                safeKILL(outF)
+                FN = FreeFile()
+                FileOpen(FN, outF, OpenMode.Output)
+
+newline:
+                If EOF(FF) = True Then GoTo doneHere
+                nextLine = Replace(LineInput(FF), vbCrLf, "")
+
+                If Len(nextLine) > 3 And Len(getLine) Then
+                    If Val(Mid(nextLine, 1, 3)) > 1 Then
+                        PrintLine(FN, Replace(getLine, vbCrLf, ""))
+                        getLine = ""
+                        'GoTo newline
+                    End If
+                End If
+
+                getLine += nextLine
+                If EOF(FF) = False Then GoTo newline
+doneHere:
+
+                PrintLine(FN, getLine)
+
+                FileClose(FF)
+                FileClose(FN)
+                End
+
+            Case "templatecsv"
+                Dim fileN$ = argValue("file", args)
+                Dim outF$ = argValue("fileout", args)
+
+                If Dir(fileN) = "" Or fileN = "" Then
+                    Console.WriteLine("Use --FILE To specify filename Of CSV containing templates")
+                    End
+                End If
+
+                If outF = "" Then
+                    Console.WriteLine("Use --FILEOUT To specify filename Of SQL output")
+                End If
+
+                Dim csvLine$ = ""
+                Dim FF As Integer = 0
+                Dim FN As Integer = 0
+                FF = FreeFile()
+
+                FileOpen(FF, fileN, OpenMode.Input)
+
+                safeKILL(outF)
+                FN = FreeFile()
+                FileOpen(FN, outF, OpenMode.Output)
+
+                Dim c$
+                c$ = Chr(34) + Chr(34)
+
+                Do Until EOF(FF) = True
+                    csvLine = LineInput(FF)
+
+                    'Id,Name,Type,Json,Description,Labels,Image,DiagramData,Guid,LibraryId,isHidden,LastUpdated
+                    'Id	Name	Json	DiagramData	Guid	LibraryId	isHidden
+
+                    Dim LOI As Object
+                    LOI = Split(csvLine, vbTab)
+
+                    Dim sqL$ = "INSERT INTO Templates (Name,Json,DiagramData,GUID,LibraryId,isHidden,LastUpdated) VALUES ("
+
+                    ' 1=name,3=json,6=image,7=diagramdata,8=guid,9=libraryID
+                    Dim colNum As Integer = 0
+
+                    For Each L In LOI
+                        If colNum > 0 Then
+                            If colNum = 3 Or colNum = 5 Or colNum = 6 Then sqL += L + ","
+                            If colNum = 1 Or colNum = 2 Or colNum = 4 Then sqL += "'" + L + "',"
+                        End If
+                        colNum += 1
+                    Next
+
+                    sqL += "'2022-02-25 2:22:22')"
+                    PrintLine(FN, sqL)
+                    'Console.WriteLine(sqL)
+                Loop
+
+                FileClose(FF)
+                FileClose(FN)
+                End
+
             Case "get_notes"
                 GRP = T.loadAllGroups(T)
                 For Each G In GRP
@@ -246,6 +416,18 @@ Module Program
                     Next
                 Next
                 End
+
+            Case "serialize"
+                Dim R As New threatStatusUpdate
+                With R
+                    .Id = 28012
+                    .ThreatId = 172202
+                    .StatusId = 2
+                    .ProjectId = 2431
+                End With
+                Console.WriteLine(T.updateThreatStat(R))
+                End
+
 
             Case "get_labels"
                 Dim LL As List(Of tmLabels)
@@ -277,6 +459,7 @@ skipMeLabel:
 
                 Console.WriteLine("# of Items: " + numItems.ToString)
                 End
+
 
             Case "get_threats", "get_threat"
                 Dim R As New tfRequest
@@ -465,9 +648,37 @@ skipSR:
             Case "get_projects"
                 Dim PP As List(Of tmProjInfo)
                 PP = T.getAllProjects()
+
+                Dim doCSV As Boolean = False
+                Dim fileN$ = ""
+
+                If Len(argValue("csvfile", args)) Then
+                    doCSV = True
+                    fileN = argValue("csvfile", args)
+                    safeKILL(fileN)
+                End If
+                Dim c$ = Chr(34)
+
+                Dim FF As Integer
+
+                If doCSV Then
+                    FF = FreeFile()
+                    FileOpen(FF, fileN, OpenMode.Output)
+                    Print(FF, "Project Name,Id,Version,Create Date,Created By,Last Modified Date,Last Modified By,Labels" + vbCrLf)
+                End If
                 For Each P In PP
                     Console.WriteLine(col5CLI(P.Name + " [" + P.Id.ToString + "]", P.Type, P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+                    If doCSV = False Then GoTo skipCSV
+                    With P
+                        Print(FF, c$ + .Name + c$ + "," + .Id.ToString + "," + c$ + .Version + c$ + "," + c$ + .CreateDate.ToShortDateString + c$ + "," + c$ + .CreatedByName + c$ + "," + c$ + .LastModifiedDate.ToShortDateString + c$ + "," + c$ + .LastModifiedByName + c$ + "," + c$ + .Labels + c$ + vbCrLf)
+                    End With
+skipCSV:
                 Next
+
+                If doCSV = True Then
+                    FileClose(FF)
+                End If
                 End
 
 
@@ -502,7 +713,7 @@ skipSR:
                         Console.WriteLine("Found " + vpcID.ToString + " [" + .VPCId + "] inside account " + A.Id.ToString + "-" + A.Name)
 
                         If IsNothing(.Version) = False Then
-                            Console.WriteLine("A model already exists for this VPC (" + fqdN + "/diagram/" + .ProjectId.ToString + ")")
+                            Console.WriteLine("A model already exists for this VPC (" + T.tmFQDN + "/diagram/" + .ProjectId.ToString + ")")
                             End
                         End If
 
@@ -672,11 +883,11 @@ nextOne:
 
                 ndxC = T.ndxATTR(cID)
                 If ndxC = -1 Then
-                        Console.WriteLine("Attribute does not exist")
-                        End
-                    End If
-                    Console.WriteLine("Found Attribute " + cID.ToString + ": " + T.lib_AT(ndxC).Name)
-                    C = T.lib_AT(ndxC)
+                    Console.WriteLine("Attribute does not exist")
+                    End
+                End If
+                Console.WriteLine("Found Attribute " + cID.ToString + ": " + T.lib_AT(ndxC).Name)
+                C = T.lib_AT(ndxC)
 
                 R.EntityType = "Threats"
                 T.lib_TH = T.getTFThreats(R)
@@ -709,7 +920,7 @@ nextOne:
 
                 If thrID = 0 Then
                     Console.WriteLine("Must provide the --THREATID of the Threat you'd like to add")
-                End
+                    End
                 End If
 
                 Dim R As tfRequest
@@ -796,9 +1007,9 @@ nextOne:
 
                 ndxC = T.ndxTHlib(cID)
                 If ndxC = -1 Then
-                        Console.WriteLine("Threat does not exist")
-                        End
-                    End If
+                    Console.WriteLine("Threat does not exist")
+                    End
+                End If
 
                 C = T.lib_TH(ndxC)
                 Console.WriteLine("Found Threat " + cID.ToString + ": " + C.Name)
@@ -1857,22 +2068,22 @@ skipComp2:
                 End
 
 
-            Case "i2i_sql_clean_roles_elements_widgets"
+            Case "sql_clean_roles_elements_widgets"
                 Dim i1 = argValue("i1", args)
                 Dim i2 = argValue("i2", args)
 
-                Dim T2 As TM_Client = returnTMClient(i2)
-                If IsNothing(T2) = True Then
-                    Console.WriteLine("Unable to connect to " + i2)
-                    End
-                End If
+                'Dim T2 As TM_Client = returnTMClient(i2)
+                'If IsNothing(T2) = True Then
+                '    Console.WriteLine("Unable to connect to " + i2)
+                '    End
+                'End If
 
-                If T2.isConnected = True Then
-                    Console.WriteLine("Connected to both " + T.tmFQDN + " and " + T2.tmFQDN)
-                Else
-                    Console.WriteLine("Unable to connect to " + i2)
-                    End
-                End If
+                'If T2.isConnected = True Then
+                '    Console.WriteLine("Connected to both " + T.tmFQDN + " and " + T2.tmFQDN)
+                'Else
+                '    Console.WriteLine("Unable to connect to " + i2)
+                '    End
+                'End If
                 Dim R As tfRequest
                 R = New tfRequest
 
@@ -2131,8 +2342,8 @@ skipComp2:
                     End If
                 Next
 
-                If blockers.count Then
-                    For Each B In blockers
+                If blockerS.Count Then
+                    For Each B In blockerS
                         Console.WriteLine(B)
                     Next
                     Console.WriteLine(vbCrLf + "CANNOT CONTINUE - Please fix libraries")
@@ -2270,7 +2481,7 @@ nextNID:
                         If showMatch Then Console.WriteLine(origStr + "      ---> " + newStr)
                         sqL = Replace(sqL, origStr, newStr)
 nextPID:
-                        Next
+                    Next
 
 
                     If newSQL Then Console.WriteLine("UPDATE Templates SET Json='" + sqL + "' WHERE Id=" + tS.Id.ToString)
@@ -2647,8 +2858,8 @@ nextItem:
                 If Len(fileN) Then FileClose(FF)
                 Console.WriteLine("=======================================")
 
-                    Console.WriteLine("# of Items: " + numItems.ToString)
-                    Console.WriteLine("# of Diffs: " + havediffs.ToString)
+                Console.WriteLine("# of Items: " + numItems.ToString)
+                Console.WriteLine("# of Diffs: " + haveDIFFs.ToString)
 
 
 
@@ -3399,73 +3610,64 @@ nextItem3:
 
                 End
 
-            Case "apply_byrne"
+            Case "change_labels"
                 loadNTY(T, "Components")
                 loadNTY(T, "SecurityRequirements")
                 T.librarieS = T.getLibraries()
 
+                Dim oldLBL$ = argValue("current", args)
+                Dim newLBL$ = argValue("new", args)
+
+                If Len(oldLBL) = 0 Then
+                    Console.WriteLine("Must specify label to search for using --CURRENT 'Label Text'")
+                    End
+                End If
+                'GoTo SRsOnly
                 For Each C In T.lib_Comps
-                    If C.LibraryId = 88 Or C.LibraryId = 89 Then
-                        With C
-                            'Console.WriteLine("NEW LABELS COMP  : " + .CompName + " [" + .CompID.ToString + "]      Library " + .LibraryId.ToString)
-                            'Console.WriteLine("LABELS: " + .Labels)
-                            Dim newLabels$ = ""
-                            If Mid(C.Labels, 1, 6) <> "Contai" Then
-                                newLabels = "Containerization" + "," + .Labels
-                            Else
-                                newLabels = .Labels
+                    With C
+                        Dim newLabels$ = ""
+                        newLabels = .Labels
+                        If InStr(.Labels, oldLBL, CompareMethod.Text) Then
+                            Console.WriteLine("NEW LABELS COMP  : " + .CompName + " [" + .CompID.ToString + "]      Library:" + .LibraryId.ToString + "   Labels:" + .Labels)
+                            If Len(newLBL) Then
+                                newLabels = Replace(newLabels, oldLBL, newLBL,,, CompareMethod.Text)
                             End If
-                            newLabels = Replace(newLabels, "kube-apiserver", "K8s - API Server")
-                            newLabels = Replace(newLabels, "kubelet", "K8s - Kubelet")
-                            newLabels = Replace(newLabels, "kube-scheduler", "K8s - Scheduler")
-                            newLabels = Replace(newLabels, "kube-workernode-config", "K8s - Node")
+                        End If
 
-                            If Mid(newLabels, Len(newLabels), 1) = "," Then newLabels = Mid(newLabels, 1, Len(newLabels) - 1)
-
-                            If newLabels <> .Labels Then
-                                C.Labels = newLabels
-                                Console.WriteLine(.CompName + " [" + .CompID.ToString + "] -> " + newLabels + ": " + T.editCOMP(C, "TF_COMPONENT_UPDATED").ToString)
-                            End If
-                        End With
-                    End If
+                        If newLabels <> .Labels Then
+                            Console.WriteLine("----- OLD: " + .Labels + "   NEW: " + newLabels)
+                            .Labels = newLabels
+                            Console.WriteLine(.CompName + " [" + .CompID.ToString + "] -> " + newLabels + ": " + T.editCOMP(C, "TF_COMPONENT_UPDATED").ToString)
+                        End If
+                    End With
                 Next
 
+                'SRsOnly:
+
+                Dim numCounted As Integer = 0
+
+                Console.WriteLine(vbCrLf + "Security Requirements--------" + vbCrLf)
                 For Each S In T.lib_SR
-                    If S.LibraryId = 88 Or S.LibraryId = 89 Then 'And InStr(S.Description, "Description") Then
-                        Dim editSR As Boolean = False
-                        With S
-                            'Console.WriteLine("SR  : " + .Name + " [" + .Id.ToString + "]      Library " + .LibraryId.ToString)
-                            'Console.WriteLine("LABELS: " + .Labels)
-                            If InStr(S.Description, "<b>Description:</b><div>") Then
-                                S.Description = Replace(S.Description, "<b>Description:</b><div>", "")
-                                'console.writeline("New description")
-                                editSR = True
+                    Dim editSR As Boolean = False
+                    With S
+                        Dim newLabels$ = ""
+                        newLabels = .Labels
+                        If InStr(.Labels, oldLBL, CompareMethod.Text) Then
+                            Console.WriteLine("NEW LABELS SR  : " + .Name + " [" + .Id.ToString + "]      Library:" + .LibraryId.ToString + "   Labels:" + .Labels)
+                            If Len(newLBL) Then
+                                newLabels = Replace(newLabels, oldLBL, newLBL,,, CompareMethod.Text)
                             End If
+                        End If
 
-                            Dim newLabels$ = ""
-                            If Mid(S.Labels, 1, 6) <> "Contai" Then
-                                newLabels = "Containerization" + "," + .Labels
-                            Else
-                                newLabels = .Labels
-                            End If
-
-                            If InStr(newLabels, "kube-apiserver") Then
-                                Dim stopHere As Integer = 1
-
-                            End If
-                            newLabels = Replace(newLabels, "kube-apiserver", "K8s - API Server")
-                            newLabels = Replace(newLabels, "kubelet", "K8s - Kubelet")
-                            newLabels = Replace(newLabels, "kube-scheduler", "K8s - Scheduler")
-                            newLabels = Replace(newLabels, "kube-workernode-config", "K8s - Node")
-
-                            If newLabels <> .Labels Then editSR = True
-                            If editSR = True Then
-                                S.Labels = newLabels
-                                Console.WriteLine(.Name + " [" + .Id.ToString + "] -> " + newLabels + ": " + T.addEditSR(S)) '(C, "TF_COMPONENT_UPDATED").ToString)
-                            End If
-                        End With
-                    End If
+                        If newLabels <> .Labels Then
+                            Console.WriteLine("----- OLD: " + .Labels + "   NEW: " + newLabels)
+                            .Labels = newLabels
+                            Console.WriteLine(.Name + " [" + .Id.ToString + "] -> " + newLabels + ": " + T.addEditSR(S)) '(C, "TF_COMPONENT_UPDATED").ToString)
+                            '                            End If
+                        End If
+                    End With
                 Next
+                '                Console.WriteLine("# of Items: " + numCounted.ToString)
                 End
 
 
@@ -3504,7 +3706,7 @@ nextItem3:
                         C1 = T.lib_Comps(ndxC1)
 
                     End If
-                    End If
+                End If
                 If Len(cNAME2) Then
                     ndxC2 = T.ndxCompbyName(cNAME2)
                     If ndxC2 = -1 Then
@@ -3640,6 +3842,7 @@ nextItem3:
     Private Function returnTMClient(fqdN$) As TM_Client
         ' returnTMClient = New TM_Client
 
+        fqdN = Replace(fqdN, "https://", "")
 
         Dim lgnS = getLogins()
         If lgnS.Count = 0 Then
@@ -5316,7 +5519,7 @@ skipComp2:
         Console.WriteLine(vbCrLf + "Instance Info" + vbCrLf + "==============================")
         Console.WriteLine(fLine("get_notes", "Returns notes associated with all components"))
         Console.WriteLine(fLine("get_groups", "Returns Groups"))
-        Console.WriteLine(fLine("get_projects", "Returns Projects"))
+        Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --CSVFILE (filename)"))
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
         Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
@@ -5329,10 +5532,10 @@ skipComp2:
         Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text"))
         Console.WriteLine(fLine("get_attr", "Returns list of attributes or single attribute, OPT --ID Id OPT arg: --SEARCH text"))
         Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT --ID Id OPT arg: --SEARCH text"))
-        Console.WriteLine(fLine("attr_report", "text"))
-        Console.WriteLine(fLine("compattr_mapping", "text"))
+        Console.WriteLine(fLine("attr_report", "Shows all entity types and number of threats - dumps to a file --ID (filename)"))
+        Console.WriteLine(fLine("compattr_mapping", "Shows results of comp_attr_mapping file (set by default) used in other cmds, like find_dups (attr)"))
         Console.WriteLine(fLine("comp_compare", "text"))
-        Console.WriteLine(fLine("find_dups", "text"))
+        Console.WriteLine(fLine("find_dups", "Shows duplicates of entity object - with ATTR gives SQL for deletion, require --ENTITY (threats/securityreq..etc)"))
 
 
         Console.WriteLine(vbCrLf + "Local TF Editing" + vbCrLf + "==============================")
@@ -5341,7 +5544,9 @@ skipComp2:
         Console.WriteLine(fLine("addattr_threat", "Add a Threat and choose SRs for an Attribute, use arg: --ID (attribute ID) --THREATID (id)"))
         Console.WriteLine(fLine("addthreat_sr", "Add a Security Requirement to a Threat, use arg: --ID (threat ID) --SRID (SR ID)"))
         Console.WriteLine(fLine("subthreat_sr", "Remove a Security Requirement from a Threat, use arg: --ID (threat ID) --SRID (SR ID)"))
+        Console.WriteLine(fLine("compattr_mappings", "Use to create file comp_template_mappings file of attribute mapping"))
         Console.WriteLine(fLine("addcomp_comp", "text"))
+        Console.WriteLine(fLine("sql_clean_roles_elements_widgets", "Produces SQL to clean out Entities & Labels"))
 
         Console.WriteLine(vbCrLf + "Instance-to-Instance (use param --I2 (fqdn) for all calls)" + vbCrLf + "=================================================")
         Console.WriteLine(fLine("i2i_threatloop_addsr", "text"))
@@ -5350,7 +5555,6 @@ skipComp2:
         Console.WriteLine(fLine("i2i_clonecomp", "Deep clone - component and all associated Threats/SRs added as necessary, use either --LIBRARY (lib name), or --ID, --NAME (component)"))
         Console.WriteLine(fLine("i2i_comploop_addth", "text"))
         Console.WriteLine(fLine("i2i_comploop_addattr", "text"))
-        Console.WriteLine(fLine("i2i_sql_clean_roles_elements_widgets", "text"))
         Console.WriteLine(fLine("i2i_lib_compare", "text"))
         Console.WriteLine(fLine("i2i_sql_libs", "text"))
         Console.WriteLine(fLine("template_convert", "text"))
@@ -5360,10 +5564,10 @@ skipComp2:
         Console.WriteLine(fLine("i2i_add_comps", "Adds every Component from default instance to i2, use arg: --I2 (fqdn_of_target)"))
         Console.WriteLine(fLine("i2i_add_srs", "Adds every SR from default instance to i2, use arg: --I2 (fqdn_of_target)"))
         Console.WriteLine(fLine("i2i_add_threats", "Adds every Threat from default instance to i2, use arg: --I2 (fqdn_of_target)"))
-        Console.WriteLine(fLine("i2i_allcomp_loop", "text"))
-        Console.WriteLine(fLine("i2i_entitylib_sql", "text"))
-        Console.WriteLine(fLine("i2i_allsr_loop", "text"))
-        Console.WriteLine(fLine("i2i_allthreat_loop", "text"))
+        Console.WriteLine(fLine("i2i_allcomp_loop", "Creates SQL dump to match GUID according to Name"))
+        Console.WriteLine(fLine("i2i_entitylib_sql", "Creates SQL for matching Library ID to GUID (make sure GUIDs are correct first) for all entities (only MH to use)"))
+        Console.WriteLine(fLine("i2i_allsr_loop", "Creates SQL dump to match GUID according to Name"))
+        Console.WriteLine(fLine("i2i_allthreat_loop", "Creates SQL dump to match GUID according to Name"))
         Console.WriteLine(fLine("i2i_allcomp_update", "Shows differences in components between 2 instances (update testing)"))
         Console.WriteLine(fLine("i2i_comp_compare", "Shows difference in a single component across instances, use --ID or --NAME (component)"))
 
