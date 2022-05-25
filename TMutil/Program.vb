@@ -70,12 +70,16 @@ Module Program
 
                 Dim filterS$ = argValue("framework", args)
                 Dim fileN$ = argValue("file", args)
+                Dim summaryOnly As Boolean = False
+                If LCase(argValue("summary", args)) = "true" Then summaryOnly = True
+
                 Dim FF As Integer
 
                 If Len(fileN) Then
                     safeKILL(fileN)
                     FF = FreeFile()
                     Call loadNTY(T, "SecurityRequirements")
+                    Console.WriteLine("Writing to CSV File: " + fileN)
                     FileOpen(FF, fileN, OpenMode.Output)
                 End If
 
@@ -99,11 +103,15 @@ Module Program
 
                             newLine += c + cFam + c + "," + S.Id.ToString + "," + c + S.Name + c + "," + c + S.Title + c + ","
 
-                            For Each SR In S.SecurityRequirements
-                                Dim srName$ = "UNDEFINED"
-                                srName = T.lib_SR(T.ndxSRlib(SR.Id)).Name
-                                Print(FF, newLine + SR.Id.ToString + "," + c + srName + c + ",1" + vbCrLf)
-                            Next
+                            If summaryOnly = True Then
+                                Print(FF, newLine + S.SecurityRequirements.Count.ToString + vbCrLf)
+                            Else
+                                For Each SR In S.SecurityRequirements
+                                    Dim srName$ = "UNDEFINED"
+                                    srName = T.lib_SR(T.ndxSRlib(SR.Id)).Name
+                                    Print(FF, newLine + SR.Id.ToString + "," + c + srName + c + ",1" + vbCrLf)
+                                Next
+                            End If
                         Else
                                 Console.WriteLine(col5CLI("", S.Name + " [" + S.Id.ToString + "]", S.Title, "   ", S.SecurityRequirements.Count.ToString))
                         End If
@@ -394,7 +402,7 @@ doneHere:
                 FileClose(FN)
                 End
 
-            Case "get_notes"
+            Case "get_notesDEPRECATE"
                 GRP = T.loadAllGroups(T)
                 For Each G In GRP
                     For Each PI In G.AllProjInfo
@@ -486,6 +494,22 @@ skipMeLabel:
                 Dim numItems As Integer = 0
 
                 If Val(argValue("id", args)) = 0 Then
+                    Dim doCSV As Boolean
+                    Dim fileN$ = argValue("file", args)
+                    Dim FF As Integer
+
+                    If Len(fileN) Then
+                        doCSV = True
+                        safeKILL(fileN)
+                        FF = FreeFile()
+                        Console.WriteLine("Writing to CSV File: " + fileN)
+                        FileOpen(FF, fileN, OpenMode.Output)
+                        Print(FF, "Library,Name,ID,Risk,Labels" + vbCrLf)
+                    End If
+
+                    Dim qq$ = Chr(34)
+
+
                     For Each P In T.lib_TH
                         If Len(srchS) Then
                             If InStr(LCase(P.Labels), srchS) Then GoTo showTH
@@ -504,12 +528,21 @@ showTH:
                         Dim idSt$ = "[" + P.Id.ToString + "]"
 
                         Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+                        If doCSV Then
+                            Print(FF, qq + lName + qq + "," + qq + P.Name + qq + "," + P.Id.ToString + "," + qq + P.RiskName + qq + "," + qq + P.Labels + qq)
+                        End If
                         numItems += 1
 skipTH:
                     Next
                     Console.WriteLine("# of items in this list: " + numItems.ToString)
+                    If doCSV Then
+                        FileClose(FF)
+                    End If
                     End
                 Else
+
+
                     Dim tNDX As Integer = T.ndxTHlib(Val(argValue("id", args)))
                     If tNDX = -1 Then
                         Console.WriteLine("NOT FOUND: Threat ID " + argValue("id", args).ToString)
@@ -577,6 +610,24 @@ skipTH:
                 Dim numItems As Integer = 0
 
                 If Val(argValue("id", args)) = 0 Then
+                    Dim doCSV As Boolean
+                    Dim fileN$ = argValue("file", args)
+                    Dim FF As Integer
+
+                    If Len(fileN) Then
+                        doCSV = True
+                        safeKILL(fileN)
+                        FF = FreeFile()
+                        Console.WriteLine("Writing to CSV File: " + fileN)
+                        FileOpen(FF, fileN, OpenMode.Output)
+                    End If
+
+                    Dim qq$ = Chr(34)
+
+                    If doCSV Then
+                        Print(FF, "Library,Name,ID,Labels" + vbCrLf)
+                    End If
+
                     For Each P In T.lib_SR
                         If Len(srchS) Then
                             If InStr(LCase(P.Labels), srchS) Then GoTo showSR
@@ -594,11 +645,17 @@ showSR:
                         Dim idSt$ = "[" + P.Id.ToString + "]"
 
                         Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+                        If doCSV Then
+                            Print(FF, qq + lName + qq + "," + qq + P.Name + qq + "," + P.Id.ToString + "," + qq + P.Labels + qq + vbCrLf)
+                        End If
                         numItems += 1
 skipSR:
                     Next
                     Console.WriteLine("# of items in this list: " + numItems.ToString)
-
+                    If doCSV Then
+                        FileClose(FF)
+                    End If
 
                     End
                 Else
@@ -645,6 +702,77 @@ skipSR:
                 End
 
 
+            Case "get_users"
+                Dim deptId As Integer = 0
+                Dim allDepts As List(Of tmDept) = T.getDepartments
+                Console.WriteLine("# of Departments: " + allDepts.Count.ToString)
+
+                Dim numDays As Integer = 0
+                If Len(argValue("lastlogin", args)) Then numDays = Val(argValue("lastlogin", args))
+                If Len(argValue("dept", args)) Then deptId = Val(argValue("dept", args))
+
+                Dim allUsers As List(Of tmUser) = New List(Of tmUser)
+                Dim doCSV As Boolean
+                Dim fileN$ = argValue("file", args)
+                Dim FF As Integer
+
+                If Len(fileN) Then
+                    doCSV = True
+                    safeKILL(fileN)
+                    FF = FreeFile()
+                    Console.WriteLine("Writing to CSV File: " + fileN)
+                    FileOpen(FF, fileN, OpenMode.Output)
+                End If
+
+                Dim c$ = Chr(34)
+
+                If doCSV Then
+                    Print(FF, "Department,DeptId,Name,UserId,Email,Username,Active,LastLogin" + vbCrLf)
+                End If
+
+                For Each D In allDepts
+                    If deptId Then
+                        If deptId <> D.Id Then GoTo skipDept1
+                    End If
+                    allUsers = T.getUsers(D.Id)
+                    For Each P In allUsers
+                        If P.DepartmentId <> D.Id Then GoTo skipUser1
+
+                        Dim LLI$ = ""
+                        If IsNothing(P.LastLogin) = False Then
+                            LLI = CDate(P.LastLogin).ToShortDateString
+                        End If
+
+                        Dim actualDays As Integer = 0
+
+                        If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+                        If numDays > 0 And Len(LLI) > 1 Then
+                            If actualDays < numDays Then
+                                GoTo skipUser1
+                            End If
+                        End If
+                        If numDays And Len(LLI) = 0 Then GoTo skipUser1
+
+                        Dim active$ = "Active"
+                        If P.Activated = False Then active = "Not Active"
+
+                        Console.WriteLine(col5CLI(D.Name + " [" + D.Id.ToString + "]", P.Name + " [" + P.Id.ToString + "]", P.Email, spaces(50 - Len(P.Email)) + active, spaces(15 - Len(active)) + LLI + " # Days: " + actualDays.ToString))
+
+                        If doCSV = False Then GoTo skipUser1
+                        With P
+                            Print(FF, c + D.Name + c + "," + D.Id.ToString + "," + c + P.Name + c + "," + P.Id.ToString + "," + c + P.Email + c + "," + c + P.Username + c + "," + c + active + c + "," + c + LLI + c + vbCrLf)
+                        End With
+skipUser1:
+                    Next
+skipDEPT1:
+                Next
+
+                If doCSV = True Then
+                    FileClose(FF)
+                End If
+                End
+
             Case "get_projects"
                 Dim PP As List(Of tmProjInfo)
                 PP = T.getAllProjects()
@@ -652,10 +780,12 @@ skipSR:
                 Dim doCSV As Boolean = False
                 Dim fileN$ = ""
 
-                If Len(argValue("csvfile", args)) Then
+                If Len(argValue("file", args)) Then
                     doCSV = True
-                    fileN = argValue("csvfile", args)
+                    fileN = argValue("file", args)
                     safeKILL(fileN)
+                    Console.WriteLine("Writing CSV file -> " + fileN)
+
                 End If
                 Dim c$ = Chr(34)
 
@@ -666,6 +796,7 @@ skipSR:
                     FileOpen(FF, fileN, OpenMode.Output)
                     Print(FF, "Project Name,Id,Version,Create Date,Created By,Last Modified Date,Last Modified By,Labels" + vbCrLf)
                 End If
+
                 For Each P In PP
                     Console.WriteLine(col5CLI(P.Name + " [" + P.Id.ToString + "]", P.Type, P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
 
@@ -1334,6 +1465,9 @@ skipATT:
                 Dim typeName$ = argValue("type", args)
                 Dim searchName$ = argValue("search", args)
 
+                Dim showUsage As Boolean = False
+                If argValue("showusage", args) = "true" Then showUsage = True
+
                 Dim R As tfRequest
                 R = New tfRequest
                 With R
@@ -1346,8 +1480,38 @@ skipATT:
 
                 Dim numLISTED As Integer = 0
 
-                Console.WriteLine(col5CLI("NAME [ID]", "TYPE", "LIBRARY", "", spaces(20) + "LABELS"))
+                If showUsage Then
+                    Dim PP As List(Of tmProjInfo)
+                    PP = T.getAllProjects()
+
+                    Console.WriteLine("Evaluating component usage across " + PP.Count.ToString + " projects..")
+
+                    loadComponentUsage(T, PP)
+                End If
+
+                Dim labelOrUsage$ = "LABELS"
+                If showUsage Then labelOrUsage = spaces(20) + "# MOD   # APP"
+                Console.WriteLine(col5CLI("NAME [ID]", "TYPE", "LIBRARY", "", labelOrUsage))
                 Console.WriteLine(col5CLI("---------", "----", "-------", "", spaces(20) + "------"))
+
+                Dim doCSV As Boolean
+                Dim fileN$ = argValue("file", args)
+                Dim FF As Integer
+
+                If Len(fileN) Then
+                    doCSV = True
+                    safeKILL(fileN)
+                    FF = FreeFile()
+                    Console.WriteLine("Writing to CSV File: " + fileN)
+                    FileOpen(FF, fileN, OpenMode.Output)
+                End If
+
+                Dim qq$ = Chr(34)
+
+                If doCSV Then
+                    Print(FF, "LIBRARY,NAME,ID,TYPE,LABELS,# MODELS,# USED" + vbCrLf) ',Username,Active,LastLogin" + vbCrLf)
+                End If
+
 
                 For Each C In T.lib_Comps
                     Dim libNDX As Integer = T.ndxLib(C.LibraryId)
@@ -1371,10 +1535,36 @@ doIT:
                     lName += " [" + C.LibraryId.ToString + "]"
                     lName += spaces(30 - Len(lName))
                     numLISTED += 1
-                    Console.WriteLine(col5CLI(C.CompName + " [" + C.CompID.ToString + "]", C.ComponentTypeName, lName, "", C.Labels))
+
+                    Dim lastCol$ = C.Labels
+                    Dim numAppearances As Integer = 0
+
+                    If showUsage = True And C.modelsPresent.Count = 0 Then GoTo dontDOit
+
+                    If showUsage Then
+                        lastCol = C.modelsPresent.Count.ToString
+                        For Each numApp In C.numInstancesPerModel
+                            numAppearances += numApp
+                        Next
+                        lastCol += "   " + numAppearances.ToString
+                    End If
+
+
+                    Console.WriteLine(col5CLI(C.CompName + " [" + C.CompID.ToString + "]", C.ComponentTypeName, lName, "", lastCol))
+
+                    If doCSV Then
+                        Dim newLabels$ = C.Labels
+                        newLabels += qq + "," + C.modelsPresent.Count.ToString + "," + numAppearances.ToString
+                        Print(FF, qq + lName + qq + "," + qq + C.Name + qq + "," + C.Id.ToString + "," + qq + C.ComponentTypeName + qq + "," + qq + newLabels + vbCrLf)
+                    End If
+
 dontDOit:
+
                 Next
                 Console.WriteLine("# in LIST: " + numLISTED.ToString)
+                If doCSV Then
+                    FileClose(FF)
+                End If
                 End
 
 
@@ -3075,6 +3265,10 @@ nextItem2:
                 Dim i1 = argValue("i1", args)
                 Dim i2 = argValue("i2", args)
 
+                Dim copyID As Integer = 0
+
+                If Len(argValue("id", args)) Then copyID = Val(argValue("id", args))
+
                 Dim T2 As TM_Client = returnTMClient(i2)
                 If IsNothing(T2) = True Then
                     Console.WriteLine("Unable to connect to " + i2)
@@ -3098,9 +3292,13 @@ nextItem2:
                 'T2.lib_Comps = T2.getTFComponents(R)
 
                 For Each C In T.lib_TH
+                    If copyID Then
+                        If copyID <> C.Id Then GoTo skipTH2
+                    End If
                     Dim a$ = ""
                     Console.WriteLine(C.Name + " [" + C.Id.ToString + "] - ADDING: " + T2.addTH(C).ToString) ': " 
                     '                    Call T2.addEditSR(C)
+skipTH2:
                 Next
                 End
 
@@ -5405,6 +5603,54 @@ skipComp2:
 
     End Sub
 
+
+
+
+
+
+
+    ' ----- MODELS --- Show models & # appearances - put into tmComponent 'modelsPresent' and 'numAppearances' properties
+
+
+    Public Sub loadComponentUsage(TM As TM_Client, AllProj As List(Of tmProjInfo))
+        ' assumes components are loaded into TM
+        Dim numProj As Integer = 0
+
+        For Each PP In AllProj
+            numProj += 1
+            Console.WriteLine("Checking Model " + numProj.ToString + ": " + PP.Name)
+            Dim P As tmModel = New tmModel
+            P = TM.getProject(PP.Id)
+
+            Console.SetCursorPosition(0, Console.CursorTop - 1)
+            Console.WriteLine(spaces(80))
+            Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+            For Each N In P.Nodes
+                For Each C In TM.lib_Comps
+                    If C.Id = N.ComponentId Then
+                        Dim currModelID As Integer = 0 'if 0, does not exist
+
+                        currModelID = C.getModelNDX(PP.Id)
+                        If currModelID = -1 Then
+                            C.modelsPresent.Add(PP.Id)
+                            C.numInstancesPerModel.Add(1)
+                        Else
+                            C.numInstancesPerModel(currModelID) += 1
+                        End If
+                    End If
+                Next
+            Next
+            Console.WriteLine(spaces(80))
+            Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+        Next
+
+    End Sub
+
+
+
+
     Private Sub loadNTY(clienT As TM_Client, ByVal ntyType$)
         Dim R As New tfRequest
 
@@ -5517,9 +5763,12 @@ skipComp2:
         Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
 
         Console.WriteLine(vbCrLf + "Instance Info" + vbCrLf + "==============================")
-        Console.WriteLine(fLine("get_notes", "Returns notes associated with all components"))
+        'Console.WriteLine(fLine("get_notes", "Returns notes associated with all components"))
         Console.WriteLine(fLine("get_groups", "Returns Groups"))
-        Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --CSVFILE (filename)"))
+        Console.WriteLine(fLine("compliance_csv", "Returns Compliance Framework/SR mapping, arg: --FILE, OPT: --SUMMARY true"))
+        Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
+        Console.WriteLine(fLine("get_users", "Returns Users, OPTIONAL --FILE (csv filename), --DEPT (id), --LASTLOGIN (days since last login)"))
+
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
         Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
@@ -5527,12 +5776,12 @@ skipComp2:
 
         Console.WriteLine(vbCrLf + "Local TF Info" + vbCrLf + "==============================")
 
-        Console.WriteLine(fLine("show_comp", "Returns list of Components, optional arg: --LIB (library name)"))
+        Console.WriteLine(fLine("show_comp", "Returns list of Components, optional args: --LIB (library name),--FILE (csv filename)"))
         Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name)) OPT: --EDIT true"))
-        Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text"))
+        Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename)"))
         Console.WriteLine(fLine("get_attr", "Returns list of attributes or single attribute, OPT --ID Id OPT arg: --SEARCH text"))
-        Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT --ID Id OPT arg: --SEARCH text"))
-        Console.WriteLine(fLine("attr_report", "Shows all entity types and number of threats - dumps to a file --ID (filename)"))
+        Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT --ID Id OPT arg: --SEARCH text,--FILE (csv filename)"))
+        Console.WriteLine(fLine("attr_report", "Shows all entity types and number of threats - dumps to a file --ID (filename),--FILE (csv filename)"))
         Console.WriteLine(fLine("compattr_mapping", "Shows results of comp_attr_mapping file (set by default) used in other cmds, like find_dups (attr)"))
         Console.WriteLine(fLine("comp_compare", "text"))
         Console.WriteLine(fLine("find_dups", "Shows duplicates of entity object - with ATTR gives SQL for deletion, require --ENTITY (threats/securityreq..etc)"))
@@ -5563,7 +5812,7 @@ skipComp2:
         Console.WriteLine(fLine("i2i_allsr_compare", "Deep discovery of differences between instances"))
         Console.WriteLine(fLine("i2i_add_comps", "Adds every Component from default instance to i2, use arg: --I2 (fqdn_of_target)"))
         Console.WriteLine(fLine("i2i_add_srs", "Adds every SR from default instance to i2, use arg: --I2 (fqdn_of_target)"))
-        Console.WriteLine(fLine("i2i_add_threats", "Adds every Threat from default instance to i2, use arg: --I2 (fqdn_of_target)"))
+        Console.WriteLine(fLine("i2i_add_threats", "Adds every Threat from default instance to i2, use arg: --I2 (fqdn_of_target), opt: --id (copy_only_ID)"))
         Console.WriteLine(fLine("i2i_allcomp_loop", "Creates SQL dump to match GUID according to Name"))
         Console.WriteLine(fLine("i2i_entitylib_sql", "Creates SQL for matching Library ID to GUID (make sure GUIDs are correct first) for all entities (only MH to use)"))
         Console.WriteLine(fLine("i2i_allsr_loop", "Creates SQL dump to match GUID according to Name"))
