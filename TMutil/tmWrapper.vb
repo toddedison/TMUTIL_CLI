@@ -264,7 +264,7 @@ errorcatch:
         getAllProjects = New List(Of tmProjInfo)
         '        Dim jsoN$ = getAPIData("/api/projects/GetAllProjects")
         Dim c$ = Chr(34)
-        Dim bodY$ = "{" + c + "virtualGridStateRequestModel" + c + ":{" + c + "state" + c + ":{" + c + "skip" + c + ":0," + c + "take" + c + ":100}}," + c + "projectFilterModel" + c + ":{" + c + "ActiveProjects" + c + ":true}}"
+        Dim bodY$ = "{" + c + "virtualGridStateRequestModel" + c + ":{" + c + "state" + c + ":{" + c + "skip" + c + ":0," + c + "take" + c + ":5000}}," + c + "projectFilterModel" + c + ":{" + c + "ActiveProjects" + c + ":true}}"
 
         Dim jsoN$ = getAPIData("/api/projects/smartfilter", True, bodY)
 
@@ -276,6 +276,33 @@ errorcatch:
 
     End Function
 
+    Public Function getPermissionsOfModel(projID As Long) As tm_userGroupPermissions
+        getPermissionsOfModel = New tm_userGroupPermissions
+
+        Dim jsoN$ = getAPIData("/api/project/" + projID.ToString + "/sharedgroupsusers")
+        '        Dim c$ = Chr(34)
+
+        'Dim grpStr$ = Mid(jsoN, 2, InStr(jsoN, "],") - 1)
+        'jsoN = Mid(jsoN, InStr(jsoN, "],") + 1)
+        'Dim usrStr$ = Mid(jsoN, InStr(jsoN, ",") + 1, InStr(jsoN, "]") - 1)
+
+        getPermissionsOfModel = JsonConvert.DeserializeObject(Of tm_userGroupPermissions)(jsoN)
+
+    End Function
+
+
+    Public Function getProjThreats(projId As Integer) As List(Of tmTThreat)
+        Dim tNodes As List(Of tmTThreat) = New List(Of tmTThreat)
+        Dim jsoN$ = getAPIData("/api/project/" + projId.ToString + "/threats?openStatusOnly=false")
+        tNodes = JsonConvert.DeserializeObject(Of List(Of tmTThreat))(jsoN)
+        Return tNodes
+    End Function
+    Public Function getProjSecReqs(projId As Integer) As List(Of tmSimpleThreatSR)
+        Dim tNodes As List(Of tmSimpleThreatSR) = New List(Of tmSimpleThreatSR)
+        Dim jsoN$ = getAPIData("/api/project/" + projId.ToString + "/securityrequirements?openStatusOnly=false")
+        tNodes = JsonConvert.DeserializeObject(Of List(Of tmSimpleThreatSR))(jsoN)
+        Return tNodes
+    End Function
 
     Public Function getLabels(Optional ByVal isSystem As Boolean = False) As List(Of tmLabels)
         getLabels = New List(Of tmLabels)
@@ -496,6 +523,13 @@ errorcatch:
         getUsers = JsonConvert.DeserializeObject(Of List(Of tmUser))(json)
     End Function
 
+    Public Function getUsersOfGroup(grp As tmGroups) As List(Of tmUserOfGroup)
+        getUsersOfGroup = New List(Of tmUserOfGroup)
+        Dim jBody$ = JsonConvert.SerializeObject(grp)
+        Dim json$ = getAPIData("/api/group/users", True, jBody)
+        getUsersOfGroup = JsonConvert.DeserializeObject(Of List(Of tmUserOfGroup))(json)
+    End Function
+
 
     Public Function getDepartments() As List(Of tmDept)
         getDepartments = New List(Of tmDept)
@@ -503,6 +537,20 @@ errorcatch:
         getDepartments = JsonConvert.DeserializeObject(Of List(Of tmDept))(json)
     End Function
 
+    Public Function isUserInList(userID As Integer, listOfUsers As List(Of tmUserOfGroup)) As Integer
+        isUserInList = -1
+
+        Dim ndX = 0
+
+        For Each L In listOfUsers
+            If L.UserId = userID Then
+                isUserInList = ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
 
 
 
@@ -2194,6 +2242,25 @@ skipThose:
 
 End Class
 
+Public Class tm_userGroupPermissions
+    Public Groups As List(Of permInfo)
+    Public Users As List(Of permInfo)
+End Class
+
+Public Class permInfo
+    Public Id As Integer
+    Public Email As String
+    Public Name As String
+    Public Permission As Integer
+
+    Public Function permString() As String
+        permString = ""
+        If Me.Permission = 2 Then permString = "AD"
+        If Me.Permission = 1 Then permString = "RW"
+        If Me.Permission = 0 Then permString = "RO"
+    End Function
+End Class
+
 Public Class entityUpdate
     '{"propertyIds":[101],"propertyEntityType":"Threats","sourceEntityIds":[449],"LibraryId":1,"EntityType":"Components","IsAddition":false}
     Public propertyIds As List(Of Integer)
@@ -2402,9 +2469,9 @@ Public Class tmGroups
         Public Department$
         Public DepartmentId$
         Public Guid As System.Guid
-        Public Projects$
-        Public GroupUsers$
-        Public AllProjInfo As List(Of tmProjInfo)
+    'Public Projects$
+    'Public GroupUsers$
+    Public AllProjInfo As List(Of tmProjInfo)
     End Class
 Public Class tmTemplate
     Public Id As Long
@@ -2469,9 +2536,14 @@ End Class
 Public Class tmDept
     Public Id As Integer
     Public Name$
+    Public Guid As System.Guid
+    Public DateCreated As DateTime
+    Public IsSystem As Boolean
     Public TotalLicenses As Integer
     Public UsedLicenses As Integer
     Public LibraryId As Integer
+    Public SharingType$
+    Public [Readonly] As Boolean
 End Class
 Public Class tmUser
     ' {
@@ -2507,6 +2579,13 @@ Public Class tmUser
 
 End Class
 
+Public Class tmUserOfGroup
+    Public Id As Integer
+    Public UserId As Integer
+    Public UserEmail$
+    Public isAdmin As Boolean
+    Public isReadOnly As Boolean
+End Class
 Public Class tmProjThreat
     ' these threats come from the DIAGRAM API as part of nodeArray
     Public Id As Long
@@ -2847,6 +2926,11 @@ Public Class tmSimpleThreatSR
     Public Id As Integer
     Public Name$
     Public StatusName$
+    Public StatusId As Integer
+    Public ElementId As Long
+    Public SecurityRequirementId As Long
+    Public SecurityRequirementName$
+
 End Class
 
 Public Class TF_Threat

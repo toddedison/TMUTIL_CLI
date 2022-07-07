@@ -55,7 +55,7 @@ Module Program
 
         If T.isConnected = True Then
             '            addLoginCreds(fqdN, uN, pW)
-            Console.WriteLine("Bearer Token Obtained/ Client connection established")
+            Console.WriteLine("Bearer Token Obtained/ Client connection established - ^C to abort at any time")
         Else
             End
         End If
@@ -701,6 +701,17 @@ skipSR:
                 Next
                 End
 
+            Case "user_libs"
+                Call userLibReport(argValue("dept", args), argValue("file", args))
+                End
+
+            Case "model_perms"
+                Call modelUsersGroupsReport(argValue("file", args))
+                End
+
+            Case "user_groups"
+                Call userGrpReport(argValue("dept", args), argValue("file", args))
+                End
 
             Case "get_users"
                 Dim deptId As Integer = 0
@@ -1361,6 +1372,12 @@ escapeHere:
             Case "get_comp"
                 Dim cID As Integer = Val(argValue("id", args))
                 Dim cNAME = argValue("name", args)
+                Dim showUsage As Boolean = False
+                Dim PP As List(Of tmProjInfo)
+                If LCase(argValue("showusage", args)) = "true" Then
+                    PP = T.getAllProjects()
+                    showUsage = True
+                End If
 
                 Dim editSTR$ = argValue("edit", args)
                 Dim doEDIT As Boolean = False
@@ -1401,7 +1418,11 @@ escapeHere:
                     Console.WriteLine("Found Component: " + T.lib_Comps(ndxC).Name + " [" + T.lib_Comps(ndxC).CompID.ToString + "]")
                     C = T.lib_Comps(ndxC)
                 End If
-                Call getBuiltComponent(C, doEDIT)
+                If showUsage = True Then
+                    showComponentUsage(T, PP, C.Id)
+                Else
+                    Call getBuiltComponent(C, doEDIT)
+                End If
                 End
 
             Case "get_attr"
@@ -1460,14 +1481,26 @@ skipATT:
                 End If
                 End
 
+
+            Case "close_control_srs"
+                Dim projId As Integer = 0
+                If Len(argValue("projid", args)) Then projId = Val(argValue("projid", args))
+                Dim reportOnly As Boolean = True
+                If LCase(argValue("makechanges", args)) = "true" Then reportOnly = False
+                Call closeSRsOfControls(projId, reportOnly)
+
+                End
+
+
+
             Case "show_comp"
                 Dim libName$ = argValue("lib", args)
                 Dim typeName$ = argValue("type", args)
                 Dim searchName$ = argValue("search", args)
-
+                Dim libsOnly As Boolean = False
+                If LCase(argValue("libsonly", args)) = "true" Then libsOnly = True
                 Dim showUsage As Boolean = False
                 If argValue("showusage", args) = "true" Then showUsage = True
-
                 Dim R As tfRequest
                 R = New tfRequest
                 With R
@@ -1478,9 +1511,17 @@ skipATT:
                 T.lib_Comps = T.getTFComponents(R)
                 T.librarieS = T.getLibraries
 
+                Dim usageLibCounts(T.librarieS.Count) As Integer
                 Dim numLISTED As Integer = 0
 
                 If showUsage Then
+                    ' set up usagelib counts
+                    Dim tLoop As Integer = 0
+                    For tLoop = 0 To T.librarieS.Count - 1
+                        usageLibCounts(tLoop) = 0
+                    Next
+
+                    'go through projects
                     Dim PP As List(Of tmProjInfo)
                     PP = T.getAllProjects()
 
@@ -1491,8 +1532,10 @@ skipATT:
 
                 Dim labelOrUsage$ = "LABELS"
                 If showUsage Then labelOrUsage = spaces(20) + "# MOD   # APP"
-                Console.WriteLine(col5CLI("NAME [ID]", "TYPE", "LIBRARY", "", labelOrUsage))
-                Console.WriteLine(col5CLI("---------", "----", "-------", "", spaces(20) + "------"))
+                If libsOnly = False Then
+                    Console.WriteLine(col5CLI("NAME [ID]", "TYPE", "LIBRARY", "", labelOrUsage))
+                    Console.WriteLine(col5CLI("---------", "----", "-------", "", spaces(20) + "------"))
+                End If
 
                 Dim doCSV As Boolean
                 Dim fileN$ = argValue("file", args)
@@ -1509,7 +1552,7 @@ skipATT:
                 Dim qq$ = Chr(34)
 
                 If doCSV Then
-                    Print(FF, "LIBRARY,NAME,ID,TYPE,LABELS,# MODELS,# USED" + vbCrLf) ',Username,Active,LastLogin" + vbCrLf)
+                    If libsOnly = False Then Print(FF, "LIBRARY,NAME,ID,TYPE,LABELS,# MODELS,# USED" + vbCrLf) Else Print(FF, "LIBRARY,ID,# USED" + vbCrLf) ',Username,Active,LastLogin" + vbCrLf)
                 End If
 
 
@@ -1545,6 +1588,7 @@ doIT:
                         lastCol = C.modelsPresent.Count.ToString
                         For Each numApp In C.numInstancesPerModel
                             numAppearances += numApp
+                            usageLibCounts(libNDX) += numApp
                         Next
                         lastCol += "   " + numAppearances.ToString
                     End If
@@ -1555,16 +1599,22 @@ doIT:
                     If doCSV Then
                         Dim newLabels$ = C.Labels
                         newLabels += qq + "," + C.modelsPresent.Count.ToString + "," + numAppearances.ToString
-                        Print(FF, qq + lName + qq + "," + qq + C.Name + qq + "," + C.Id.ToString + "," + qq + C.ComponentTypeName + qq + "," + qq + newLabels + vbCrLf)
+                        If libsOnly = False Then Print(FF, qq + lName + qq + "," + qq + C.Name + qq + "," + C.Id.ToString + "," + qq + C.ComponentTypeName + qq + "," + qq + newLabels + vbCrLf)
                     End If
 
 dontDOit:
 
                 Next
                 Console.WriteLine("# in LIST: " + numLISTED.ToString)
-                If doCSV Then
+                If doCSV And libsOnly = False Then
                     FileClose(FF)
                 End If
+                Console.WriteLine(vbCrLf)
+                Dim kLoop As Integer = 0
+                For kLoop = 0 To T.librarieS.Count - 1
+                    Console.WriteLine(T.librarieS(kLoop).Name + " [" + T.librarieS(kLoop).Id.ToString + "]: " + usageLibCounts(kLoop).ToString)
+                    If doCSV = True And libsOnly = True Then Print(FF, qq + T.librarieS(kLoop).Name + qq + "," + T.librarieS(kLoop).Id.ToString + "," + usageLibCounts(kLoop).ToString + vbCrLf)
+                Next
                 End
 
 
@@ -5611,6 +5661,64 @@ skipComp2:
 
     ' ----- MODELS --- Show models & # appearances - put into tmComponent 'modelsPresent' and 'numAppearances' properties
 
+    Public Sub closeSRsOfControls(projId As Integer, reportOnly As Boolean)
+        'go through projects
+        Dim PP As List(Of tmProjInfo)
+        PP = T.getAllProjects()
+
+        '  Console.WriteLine("Evaluating component usage across " + PP.Count.ToString + " projects..")
+        For Each P In PP
+            If projId <> 0 Then
+                If projId <> P.Id Then GoTo nextProj : 
+            End If
+
+            Dim projThreats As List(Of tmTThreat)
+            Dim projSRs As List(Of tmSimpleThreatSR)
+            projThreats = T.getProjThreats(P.Id)
+            projSRs = T.getProjSecReqs(P.Id)
+
+            Dim theProj As tmModel = T.getProject(P.Id)
+
+            Dim onlyMitigatedThreats As List(Of tmTThreat) = returnThreatsOfStatus(projThreats)
+            Dim onlyOpenSRs As List(Of tmSimpleThreatSR) = returnSRsOfStatus(projSRs)
+
+            Console.WriteLine("Proj " + P.Id.ToString + ": " + P.Name + spaces(50 - Len(P.Name)) + "      Components: " + theProj.Nodes.Count.ToString + "  Threats: " + projThreats.Count.ToString + "/" + onlyMitigatedThreats.Count.ToString + " Mitigated     Requirements: " + projSRs.Count.ToString + "/" + onlyOpenSRs.Count.ToString + " Open")
+
+            ' need to determine Threats eligible
+            ' (1) Must be in a MITIGATED status (done by here)
+            ' (2) Should contain NOTE mentioning mitigation by control (this might require 1x API per call)
+            '
+            ' need to determine SRs eligible for CLOSE
+            ' Identify all SRs of a Threat
+            ' (1) Must be in an OPEN status
+            ' (2) Must be related to threat of same Component (threat.sourceid = sr.elementid)
+            '            --- can simply trust labels because of #2, otherwise SR would not be part of component
+
+
+
+
+
+nextProj:
+        Next
+    End Sub
+
+    Private Function returnThreatsOfStatus(listOfThreats As List(Of tmTThreat), Optional ByVal statuS$ = "Mitigated") As List(Of tmTThreat)
+        returnThreatsOfStatus = New List(Of tmTThreat)
+        For Each tH In listOfThreats
+            If tH.StatusName = statuS Then
+                returnThreatsOfStatus.Add(tH)
+            End If
+        Next
+    End Function
+
+    Private Function returnSRsOfStatus(listOfSRs As List(Of tmSimpleThreatSR), Optional ByVal statuS$ = "Open") As List(Of tmSimpleThreatSR)
+        returnSRsOfStatus = New List(Of tmSimpleThreatSR)
+        For Each sR In listOfSRs
+            If sR.StatusName = statuS Then
+                returnSRsOfStatus.Add(sR)
+            End If
+        Next
+    End Function
 
     Public Sub loadComponentUsage(TM As TM_Client, AllProj As List(Of tmProjInfo))
         ' assumes components are loaded into TM
@@ -5648,8 +5756,424 @@ skipComp2:
 
     End Sub
 
+    Public Sub showComponentUsage(TM As TM_Client, AllProj As List(Of tmProjInfo), compID As Integer)
+        ' assumes components are loaded into TM
+        Dim numProj As Integer = 0
+
+        For Each PP In AllProj
+            numProj += 1
+            Console.WriteLine("Checking Model " + numProj.ToString + ": " + PP.Name)
+            Dim P As tmModel = New tmModel
+            P = TM.getProject(PP.Id)
+
+            Console.SetCursorPosition(0, Console.CursorTop - 1)
+            Console.WriteLine(spaces(80))
+            Console.SetCursorPosition(0, Console.CursorTop - 1)
+            Dim occur As Integer = 0
+
+            For Each N In P.Nodes
+                If compID = N.ComponentId Then
+                    occur += 1
+                End If
+            Next
+            If occur > 0 Then Console.WriteLine("Project: " + PP.Name + " [" + PP.Id.ToString + "] " + spaces(50 - Len(PP.Name)) + " # Occurrences: " + occur.ToString)
+        Next
 
 
+    End Sub
+    Public Sub userLibReport(deptArgs$, fileArgs$)
+        Dim deptId As Integer = 0
+        If Len(deptArgs) Then deptId = Val(deptArgs)
+
+        Dim fileN$ = fileArgs
+
+        Dim doCSV As Boolean
+
+        Dim DP As List(Of tmDept)
+        DP = T.getDepartments
+        Dim GG As List(Of tmGroups)
+        GG = T.getGroups()
+
+        Dim usersOfContMgmt As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup)
+        Dim superUsers As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup)
+
+        Dim contentMgmtId As Integer = 0
+        For Each G In GG
+            If G.Name = "Content Management" Then
+                contentMgmtId = G.Id
+                usersOfContMgmt = T.getUsersOfGroup(G)
+            End If
+            If G.Name = "Super User" Then
+                contentMgmtId = G.Id
+                superUsers = T.getUsersOfGroup(G)
+            End If
+        Next
+        Console.WriteLine("# of Users with TF Access: " + usersOfContMgmt.Count.ToString)
+        Console.WriteLine("# of Super Users         : " + superUsers.Count.ToString + vbCrLf)
+
+        Dim FF As Integer
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+        End If
+
+        Dim c$ = Chr(34)
+
+        Dim listOfDepts$ = ""
+        For Each depT In DP
+            If deptId Then
+                If deptId = depT.Id Then
+                    If depT.IsSystem = False Then
+                        listOfDepts += depT.Name + ","
+                    End If
+                End If
+            Else
+                If depT.IsSystem = False Then
+                    listOfDepts += depT.Name + ","
+                End If
+            End If
+
+        Next
+        listOfDepts = Mid(listOfDepts, 1, Len(listOfDepts) - 1)
+        listOfDepts = "Username,Email,Department,TF Access," + listOfDepts
+
+        If doCSV Then
+            Print(FF, listOfDepts + vbCrLf)
+        End If
+        Console.WriteLine("EMail" + spaces(30) + "Department         DEPT Libs")
+        Console.WriteLine("=====" + spaces(30) + "==========         ========================")
+
+        For Each D In DP
+            If deptId Then
+                If deptId <> D.Id Then GoTo skipDEPT2
+            End If
+            Dim allUsers As List(Of tmUser) = T.getUsers(D.Id)
+            For Each P In allUsers
+                If P.DepartmentId <> D.Id Then GoTo skipUser2
+                Dim dString$ = D.Name + "[" + D.Id.ToString + "]"
+
+                Dim active$ = "Active"
+                If P.Activated = False Then
+                    active = "Not Active"
+                    GoTo skipUser2
+                End If
+
+                Dim fileLine$ = c + P.Username + c + "," + c + P.Email + c + "," + c + dString + c + ","
+
+                Dim accessString$ = ""
+                Dim cMgmtPermission$ = ""
+
+                Dim isSuperUser As Boolean = False
+                If T.isUserInList(P.Id, superUsers) <> -1 Then isSuperUser = True
+
+                Dim cMgmtUserId As Integer = T.isUserInList(P.Id, usersOfContMgmt)
+                If cMgmtUserId <> -1 Then
+                    If usersOfContMgmt(cMgmtUserId).isAdmin Then
+                        accessString = "AD"
+                    Else
+                        If usersOfContMgmt(cMgmtUserId).isReadOnly Then accessString = "RO" Else accessString = "RW"
+                    End If
+                Else
+                    accessString = "N"
+                End If
+
+                If isSuperUser = True Then accessString = "AD"
+
+                If accessString = "N" Then fileLine += "," Else fileLine += accessString + ","
+                If accessString = "N" Then accessString = ""
+
+                Dim screenLine$ = Mid(P.Email, 1, 38) + spaces(35 - Len(Mid(P.Email, 1, 38))) + dString + spaces(17 - Len(dString)) + "  " ' + accessString + "     "
+
+                'USE library components
+                'TF/RO
+                'TF/RW
+                'TF/ADMIN
+
+                For Each depT In DP
+                    If isSuperUser = True Then
+                        Dim suStr$ = "AD"
+                        'If depT.SharingType = "Private" Then suStr = "USE"
+                        screenLine += depT.Name + "[" + suStr + "]" + ","
+                        fileLine += suStr + ","
+                        GoTo skipDeptLoop
+                    End If
+                    If depT.Id = D.Id Then
+                        ' user belongs to this dept
+                        If depT.Readonly = True Then
+                            screenLine += depT.Name + "[RO]" + ","
+                            fileLine += "RO" + ","
+                        Else
+                            If accessString = "" Then
+                                screenLine += depT.Name + "[USE]" + ","
+                                fileLine += "USE" + ","
+                            Else
+                                screenLine += depT.Name + "[" + accessString + "]" + ","
+                                fileLine += accessString + ","
+                            End If
+                        End If
+                    Else
+                        If depT.SharingType = "Private" Then
+                            fileLine += ","
+                        Else
+                            If accessString = "" Then
+                                screenLine += depT.Name + "[USE]" + ","
+                                fileLine += "USE,"
+                            Else
+                                If depT.Readonly = True Then
+                                    screenLine += depT.Name + "[RO]" + ","
+                                    fileLine += "RO,"
+                                Else
+                                    screenLine += depT.Name + "[" + accessString + "]" + ","
+                                    fileLine += accessString + ","
+                                End If
+                            End If
+                        End If
+                    End If
+skipDeptLoop:
+                Next
+
+                Console.WriteLine(RTrim(Mid(screenLine, 1, Len(screenLine) - 1)))
+                If doCSV = False Then GoTo skipUser2
+                With P
+                    Print(FF, Mid(fileLine, 1, Len(fileLine) - 1) + vbCrLf)
+                    'Print(FF, c + D.Name + c + "," + D.Id.ToString + "," + c + P.Name + c + "," + P.Id.ToString + "," + c + P.Email + c + "," + c + P.Username + c + "," + c + active + c + "," + c + LLI + c + vbCrLf)
+                End With
+skipUser2:
+            Next
+skipDEPT2:
+        Next
+
+        If doCSV Then FileClose(FF)
+        End
+
+    End Sub
+
+    Public Sub modelUsersGroupsReport(fileArgs$)
+        Dim fileN$ = fileArgs
+
+        Dim doCSV As Boolean
+
+        Dim FF As Integer
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "ModelName,CreatedBy,Groups,Users" + vbCrLf)
+        End If
+
+        Dim c$ = Chr(34)
+
+        Dim PP As List(Of tmProjInfo)
+        PP = T.getAllProjects()
+
+        For Each P In PP
+            Dim modelPerms As tm_userGroupPermissions = T.getPermissionsOfModel(P.Id)
+            Dim grpStr$ = ""
+            Dim usrStr$ = ""
+            For Each G In modelPerms.Groups
+                grpStr += G.Name + " [" + G.permString + "],"
+            Next
+            grpStr = Mid(grpStr, 1, Len(grpStr) - 1)
+            For Each U In modelPerms.Users
+                usrStr += U.Name + " [" + U.permString + "],"
+            Next
+            usrstr = Mid(usrstr, 1, Len(usrstr) - 1)
+
+            Console.WriteLine(P.Name + spaces(40 - Len(P.Name)) + P.CreatedByName + spaces(30 - Len(P.CreatedByName)) + "Groups: " + grpStr + " Users: " + usrStr)
+            If doCSV = True Then Print(FF, c$ + P.Name + c$ + "," + c$ + P.CreatedByName + c$ + "," + c$ + grpStr + c$ + "," + c$ + usrStr + c$ + vbCrLf)
+
+        Next
+
+        If doCSV Then
+            FileClose(FF)
+        End If
+
+    End Sub
+
+    Public Sub userGrpReport(deptArgs$, fileArgs$)
+        Dim deptId As Integer = 0
+        If Len(deptArgs) Then deptId = Val(deptArgs)
+
+        Dim fileN$ = fileArgs
+
+        Dim doCSV As Boolean
+
+        Dim DP As List(Of tmDept)
+        DP = T.getDepartments
+        Dim GG As List(Of tmGroups)
+        GG = T.getGroups()
+
+        Dim superUsers As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup)
+        Dim deptAdmins As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup)
+        Dim fullAuditCorp As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup) 'Corporate Group
+        Dim workflowGroup As List(Of tmUserOfGroup) = New List(Of tmUserOfGroup) ' Group
+
+
+        Dim listOfGroups$ = ""
+
+        Dim listOfUsersPerGroup(GG.Count) As List(Of tmUserOfGroup)
+        Dim allGroups As List(Of tmGroups) = New List(Of tmGroups)
+
+        For Each G In GG
+            Select Case G.Name
+                Case "Super User"
+                    superUsers = T.getUsersOfGroup(G)
+                Case "Administrator"
+                    deptAdmins = T.getUsersOfGroup(G)
+                Case "Corporate"
+                    fullAuditCorp = T.getUsersOfGroup(G)
+                Case "Workflow Management"
+                    workflowGroup = T.getUsersOfGroup(G)
+            End Select
+            allGroups.Add(G)
+            listOfUsersPerGroup(allGroups.Count - 1) = T.getUsersOfGroup(G)
+            listOfGroups += G.Name + ","
+            Console.WriteLine("# of Users in " + G.Name + " " + spaces(50 - Len(G.Name)) + ": " + listOfUsersPerGroup(allGroups.Count - 1).Count.ToString)
+        Next
+
+
+        Dim FF As Integer
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+        End If
+
+        Dim c$ = Chr(34)
+
+
+        listOfGroups$ = Mid(listOfGroups$, 1, Len(listOfGroups$) - 1)
+        listOfGroups$ = "Username,Email,Department," + listOfGroups$
+
+        If doCSV Then
+            Print(FF, listOfGroups$ + vbCrLf)
+        End If
+        Console.WriteLine("EMail" + spaces(30) + "Department         Groups")
+        Console.WriteLine("=====" + spaces(30) + "==========         ========================")
+        Dim screenLine$ = ""
+        Dim fileLine$ = ""
+
+        For Each D In DP
+            If deptId Then
+                If deptId <> D.Id Then GoTo skipDEPT2
+            End If
+            Dim allUsers As List(Of tmUser) = T.getUsers(D.Id)
+
+            For Each P In allUsers
+                If P.DepartmentId <> D.Id Then GoTo skipUser2
+                Dim dString$ = D.Name + "[" + D.Id.ToString + "]"
+
+                Dim active$ = "Active"
+                If P.Activated = False Then
+                    active = "Not Active"
+                    GoTo skipUser2
+                End If
+
+                fileLine$ = c + P.Username + c + "," + c + P.Email + c + "," + c + dString + c + ","
+
+                Dim accessString$ = ""
+
+                Dim isSuperUser As Boolean = False
+                Dim isCorpUser As Boolean = False
+                Dim isWorkflow As Boolean = False
+                If T.isUserInList(P.Id, superUsers) <> -1 Then isSuperUser = True
+                If T.isUserInList(P.Id, workflowGroup) <> -1 Then isWorkflow = True
+                If T.isUserInList(P.Id, fullAuditCorp) <> -1 Then isCorpUser = True
+
+                If isSuperUser = True Then accessString = "AD"
+
+                screenLine$ = Mid(P.Email, 1, 38) + spaces(35 - Len(Mid(P.Email, 1, 38))) + dString + spaces(17 - Len(dString)) + "  "
+                Dim groupUsersNDX As Integer = -1
+
+                For Each G In GG
+                    '                    If G.DepartmentId <> D.Id Then GoTo nextGroup    (should have N/A if Group is not part of Dept)
+
+                    Dim ndX As Integer = 0
+                    For Each grp In allGroups
+                        If grp.Name = G.Name Then
+                            groupUsersNDX = ndX
+                        End If
+                        ndX += 1
+                    Next
+
+                    If groupUsersNDX = -1 Then
+                        Console.WriteLine("ERROR: Cannot match GROUP " + G.Name)
+                        GoTo nextGroup
+                    End If
+
+                    Dim checkAdmin As Boolean = False
+                    Dim isUserGroup As Boolean = False
+
+                    If G.Name = "Administrator" Or G.Name = "Content Management" Or G.Name = "Template Management" Then
+                        checkAdmin = True
+                        isUserGroup = False
+                    Else
+                        If G.Name <> "Workflow Management" And G.Name <> "Corporate" And G.Name <> "Super User" Then isUserGroup = True
+                    End If
+
+                    '  ' if SuperUser, then AD or Y on all groups
+                    ' if Corporate, then Y on all groups other than Content Mgmt/Temp Mgmt/Workflow Mgmt
+                    ' if Workflow Mgmt, then Y on all user groups in Dept
+
+
+
+                    Dim usrNdx As Integer = 0
+                    usrNdx = T.isUserInList(P.Id, listOfUsersPerGroup(groupUsersNDX))
+                    If usrNdx <> -1 Or isSuperUser = True Then
+                        If checkAdmin = False Then
+                            screenLine += G.Name + ","
+                            fileLine += "Y,"
+                        Else
+                            Dim aStr$ = "RW"
+                            If isSuperUser = True Then
+                                aStr = "AD"
+                            Else
+                                If listOfUsersPerGroup(groupUsersNDX).Item(usrNdx).isAdmin Then aStr = "AD"
+                                If listOfUsersPerGroup(groupUsersNDX).Item(usrNdx).isReadOnly Then aStr = "RO"
+                            End If
+                            screenLine += G.Name + " [" + aStr + "],"
+                            fileLine += aStr + ","
+                        End If
+                    Else
+                        'screenLine += G.Name + ","
+                        ' here catch users who are not explicitly in group but might have rights anyway
+                        Dim hasAccess As Boolean = False
+                        If isCorpUser = True And isUserGroup = True Then hasAccess = True
+                        If isWorkflow = True And G.DepartmentId = P.DepartmentId And isUserGroup = True Then hasAccess = True
+                        If hasAccess = False Then
+                            fileLine += ","
+                        Else
+                            screenLine += G.Name + ","
+                            fileLine += "Y,"
+                        End If
+
+                    End If
+
+nextGroup:
+                Next
+
+skipUser2:
+                Console.WriteLine(Mid(screenLine, 1, Len(screenLine) - 1) + vbCrLf)
+                If doCSV Then Print(FF, Mid(fileLine, 1, Len(fileLine) - 1) + vbCrLf)
+            Next P
+
+skipDept2:
+        Next D
+
+
+        If doCSV Then FileClose(FF)
+
+    End Sub
 
     Private Sub loadNTY(clienT As TM_Client, ByVal ntyType$)
         Dim R As New tfRequest
@@ -5762,12 +6286,18 @@ skipComp2:
         Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
         Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
 
+        Console.WriteLine(vbCrLf + "User Mgmt/RBAC" + vbCrLf + "==============================")
+        Console.WriteLine(fLine("get_users", "Returns Users, OPTIONAL --FILE (csv filename), --DEPT (id), --LASTLOGIN (days since last login)"))
+        Console.WriteLine(fLine("user_libs", "Returns User access to TF Libraries, OPTIONAL --FILE (csv filename), --DEPT (id)"))
+        Console.WriteLine(fLine("user_groups", "Returns User access to TF Groups, OPTIONAL --FILE (csv filename), --DEPT (id)"))
+        Console.WriteLine(fLine("model_perms", "Returns Threat Model access by Groups and Users, OPTIONAL --FILE (csv filename)"))
+
+
         Console.WriteLine(vbCrLf + "Instance Info" + vbCrLf + "==============================")
         'Console.WriteLine(fLine("get_notes", "Returns notes associated with all components"))
         Console.WriteLine(fLine("get_groups", "Returns Groups"))
         Console.WriteLine(fLine("compliance_csv", "Returns Compliance Framework/SR mapping, arg: --FILE, OPT: --SUMMARY true"))
         Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
-        Console.WriteLine(fLine("get_users", "Returns Users, OPTIONAL --FILE (csv filename), --DEPT (id), --LASTLOGIN (days since last login)"))
 
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
@@ -5776,11 +6306,11 @@ skipComp2:
 
         Console.WriteLine(vbCrLf + "Local TF Info" + vbCrLf + "==============================")
 
-        Console.WriteLine(fLine("show_comp", "Returns list of Components, optional args: --LIB (library name),--FILE (csv filename)"))
-        Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name)) OPT: --EDIT true"))
+        Console.WriteLine(fLine("show_comp", "Returns list of Components, OPT args:--LIB (library name),--FILE (csv filename),--SHOWUSAGE true, --LIBSONLY true"))
+        Console.WriteLine(fLine("get_comp", "Returns details of Component, use arg: --ID (component ID) or --NAME (component name)) OPT args: --EDIT true, --SHOWUSAGE true"))
         Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename)"))
-        Console.WriteLine(fLine("get_attr", "Returns list of attributes or single attribute, OPT --ID Id OPT arg: --SEARCH text"))
-        Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT --ID Id OPT arg: --SEARCH text,--FILE (csv filename)"))
+        Console.WriteLine(fLine("get_attr", "Returns list of attributes or single attribute, OPT args: OPT --ID Id, arg: --SEARCH text"))
+        Console.WriteLine(fLine("get_sr", "Returns list of SRs or single Security Requirement, OPT args: --ID Id,--SEARCH text,--FILE (csv filename)"))
         Console.WriteLine(fLine("attr_report", "Shows all entity types and number of threats - dumps to a file --ID (filename),--FILE (csv filename)"))
         Console.WriteLine(fLine("compattr_mapping", "Shows results of comp_attr_mapping file (set by default) used in other cmds, like find_dups (attr)"))
         Console.WriteLine(fLine("comp_compare", "text"))

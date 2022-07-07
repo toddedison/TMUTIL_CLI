@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "show_comp --showusage true"
+      "commandLineArgs": "close_control_srs"
     }
   }
 }
