@@ -232,6 +232,16 @@ Public Class TM_Client
         ' Return TF
     End Function
 
+    Public Function setNewSRstatus(SR As tmupdateSR) As Boolean
+        setNewSRstatus = False
+        Dim jBody$ = ""
+        jBody = "[" + JsonConvert.SerializeObject(SR) + "]"
+
+
+        Dim json$ = getAPIData("/api/securityrequirement/status", True, jBody)
+        ' Console.WriteLine(json)
+        setNewSRstatus = True
+    End Function
 
     Public Function getGroups() As List(Of tmGroups)
         getGroups = New List(Of tmGroups)
@@ -1393,6 +1403,91 @@ nextSR:
 
     End Function
 
+    Public Function getNotesOfThreat(theThreat As tmTThreat, projID As Integer) As List(Of tmNote)
+        getNotesOfThreat = New List(Of tmNote)
+        Dim jSon$ = ""
+        Dim jBody$ = ""
+
+        Dim gnR As New getNoteReq
+        With gnR
+            .Id = theThreat.Id
+            .ThreatId = theThreat.ThreatId
+            .ProjectId = projID
+        End With
+
+        jBody = JsonConvert.SerializeObject(gnR)
+        jSon$ = getAPIData("/api/threats/notes/all", True, jBody)
+
+        getNotesOfThreat = JsonConvert.DeserializeObject(Of List(Of tmNote))(jSon)
+    End Function
+
+
+    Public Function getSRsOfThreat(threatID As Integer) As List(Of tmProjSecReq)
+        If IsNothing(Me.lib_TH) = True Then
+            Dim R As New tfRequest
+
+            With R
+                .EntityType = "Threats"
+                .LibraryId = 0
+                .ShowHidden = False
+            End With
+
+            Me.lib_TH = Me.getTFThreats(R)
+            Console.WriteLine("Loaded threats from TF: " + Me.lib_TH.Count.ToString)
+            R.EntityType = "SecurityRequirements"
+            Me.lib_SR = Me.getTFSecReqs(R)
+            Console.WriteLine("Loaded SRs from TF: " + Me.lib_SR.Count.ToString)
+        End If
+
+        getSRsOfThreat = New List(Of tmProjSecReq)
+
+
+        Dim jBody$
+        Dim jSon$
+        Dim tcStr$
+        Dim tsrStr$
+        Dim T As tmProjThreat
+        Dim ndxTH As Integer
+        Dim cReq As tmTFQueryRequest
+        Dim modeL$
+
+        'Console.WriteLine(vbCrLf)
+
+        ndxTH = ndxTHlib(threatID)
+        T = lib_TH(ndxTH)
+
+        'removed check for ISBUILT to save time - need to refine this
+
+        T.listLinkedSRs = New Collection
+        ' End If
+
+        cReq = New tmTFQueryRequest
+            modeL$ = JsonConvert.SerializeObject(T) 'submits serialized model with escaped quotes
+
+        'Console.WriteLine("Compiling details for ThreatID " + T.Id.ToString)
+        With cReq
+                .Model = modeL
+                .LibraryId = T.LibraryId
+                .EntityType = "Threats"
+            End With
+
+            jBody$ = JsonConvert.SerializeObject(cReq)
+            jSon$ = getAPIData("/api/threatframework/query", True, jBody)
+            ' should come back with TESTCASES,SECREQ lists
+
+            tcStr$ = Mid(jSon, 2, InStr(jSon, "],") - 1) 'test cases here if you want 'em
+            jSon = Mid(jSon, InStr(jSon, "],") + 1)
+            tsrStr$ = Mid(jSon, InStr(jSon, ",") + 1, InStr(jSon, "]") - 1)
+
+        getSRsOfThreat = New List(Of tmProjSecReq)
+        getSRsOfThreat = JsonConvert.DeserializeObject(Of List(Of tmProjSecReq))(tsrStr)
+
+        For Each srOf In getSRsOfThreat
+            T.listLinkedSRs.Add(srOf.Id)
+        Next
+        T.isBuilt = True
+    End Function
+
     Private Function addTransitiveSRs(ByRef C As tmComponent) As List(Of tmProjSecReq)
         addTransitiveSRs = New List(Of tmProjSecReq)
         If C.listThreats.Count = 0 Then Exit Function
@@ -1748,6 +1843,7 @@ skipTheLoad:
         Public UserPermissions As List(Of String)
         Public GroupPermissions As List(Of String)
     End Class
+
 
     Public Class tmTFQueryRequest
         Public Model$
@@ -2196,8 +2292,6 @@ skipThose:
         Next
 
     End Function
-
-
 
     Public Sub addNode(ByRef tmMOD As tmModel, ByRef T As tmTThreat)
         ' create node inside tmMOD based on threat T (from Threats API)
@@ -2865,7 +2959,70 @@ Public Class tmComponent
     End Sub
 
 End Class
+Public Class tmNote
+    Public CreatedByName As String
+    Public CreatedDate As DateTime
+    Public Notes As String
+End Class
 
+Public Class controlAffect
+    Public ActionByName As String
+    Public ActionDate As DateTime
+    Public Action As String
+    Public Control As String
+
+    Public Sub New(Notes As List(Of tmNote))
+        For Each N In Notes
+            Me.ActionByName = N.CreatedByName
+            Me.ActionDate = N.CreatedDate
+
+            Dim mitG$ = "Changed Status to Mitigated by Security Control"
+            Dim opeN$ = "Changed Status to Open due to removal of Security Control"
+
+            If InStr(N.Notes, mitG) Then
+                Me.Action = "Mitigated"
+                Control = Mid(N.Notes, Len(mitG) + 2)
+            End If
+            If InStr(N.Notes, opeN) Then
+                Me.Action = "Open"
+                Control = Mid(N.Notes, Len(opeN) + 2)
+            End If
+
+        Next
+    End Sub
+End Class
+
+Public Class tmupdateSR
+    '[{“Id”:28012,”SecurityRequirementId”:245274,”ProjectId”:2431,”StatusId”:2}]
+    'Public Id As Long
+    Public Id As Long
+    Public SecurityRequirementId As Long
+    Public ProjectId As Long
+    Public StatusId As Integer
+    '    Public ExternalSourceId As String
+    Public Sub setStatus(statusName$)
+        Select Case statusName
+            Case "Open"
+                StatusId = 4
+            Case "Closed"
+                StatusId = 5
+            Case "Exception"
+                StatusId = 12
+            Case "ToDo"
+                StatusId = 9
+            Case "Recommended"
+                StatusId = 13
+            Case "Unable To Test"
+                StatusId = 14
+        End Select
+    End Sub
+End Class
+Public Class getNoteReq
+    '{"Id":153193,"ThreatId":81,"ProjectId":2114}
+    Public Id As Long
+    Public ThreatId As Integer
+    Public ProjectId As Integer
+End Class
 
 Public Class tmProjSecReq
     Public Id As Long

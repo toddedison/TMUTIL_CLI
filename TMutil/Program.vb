@@ -1485,9 +1485,24 @@ skipATT:
             Case "close_control_srs"
                 Dim projId As Integer = 0
                 If Len(argValue("projid", args)) Then projId = Val(argValue("projid", args))
+
                 Dim reportOnly As Boolean = True
                 If LCase(argValue("makechanges", args)) = "true" Then reportOnly = False
-                Call closeSRsOfControls(projId, reportOnly)
+                Dim fileN$ = ""
+                fileN = argValue("file", args)
+
+                If reportOnly = True Then
+                    Console.WriteLine("Creating Report Only.. in order to make changes, use --MAKECHANGES true and supply datafile as --FILE datafilefilename.csv" + vbCrLf + vbCrLf + "CSV Data file should contain ONLY last 3 fields of original report:" + vbCrLf + "SRID,STATID,PROJID")
+                End If
+
+                If projId = 0 And reportOnly = True Then
+                    If argValue("allproj", args) <> "true" Then
+                        Console.WriteLine("Currently enabled for only a single project at a time > specify --PROJID or use --ALLPROJ true")
+                        End
+                    End If
+                End If
+
+                Call closeSRsOfControls(projId, reportOnly, fileN)
 
                 End
 
@@ -5661,10 +5676,64 @@ skipComp2:
 
     ' ----- MODELS --- Show models & # appearances - put into tmComponent 'modelsPresent' and 'numAppearances' properties
 
-    Public Sub closeSRsOfControls(projId As Integer, reportOnly As Boolean)
+    Public Sub closeSRsFromFile(fileN$)
+        Dim srFromFile() As String
+        Dim a$ = ""
+
+        Dim FF As Integer = FreeFile()
+        FileOpen(FF, fileN, OpenMode.Input)
+
+        Do Until EOF(FF) = True
+            a = LineInput(FF)
+            If InStr(a, "SRID") Then GoTo skipHeader
+
+            srFromFile = Split(a, ",")
+
+            Dim SR As tmupdateSR = New tmupdateSR
+            With SR
+                .Id = Val(srFromFile(0))
+                .SecurityRequirementId = .Id
+                .StatusId = Val(srFromFile(1))
+                .ProjectId = Val(srFromFile(2))
+
+                Console.WriteLine("RequirementId " + .SecurityRequirementId.ToString + " setting to StatusId=5 in ProjId " + .ProjectId.ToString + ": " + T.setNewSRstatus(SR).ToString)
+            End With
+
+skipHeader:
+        Loop
+
+        FileClose(FF)
+    End Sub
+    Public Sub closeSRsOfControls(projId As Integer, reportOnly As Boolean, Optional ByVal fileN$ = "")
         'go through projects
+
+        If reportOnly = False Then
+            If Len(fileN) = 0 Or Dir(fileN) = "" Then
+                Console.WriteLine("Invalid filename.. In order to close SRs, you need to provide an input file --FILE.")
+                Exit Sub
+            End If
+            Call closeSRsFromFile(fileN)
+            Exit Sub
+        End If
+
         Dim PP As List(Of tmProjInfo)
+
         PP = T.getAllProjects()
+
+        Dim doCSV As Boolean = False
+        Dim FF As Integer = 0
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Project,SecurityControl,Component,ThreatName,RequirementToClose,#TH,#SR,SRID,STATID,PROJID" + vbCrLf)
+        End If
+
+        Dim c$ = Chr(34)
+
 
         '  Console.WriteLine("Evaluating component usage across " + PP.Count.ToString + " projects..")
         For Each P In PP
@@ -5682,11 +5751,12 @@ skipComp2:
             Dim onlyMitigatedThreats As List(Of tmTThreat) = returnThreatsOfStatus(projThreats)
             Dim onlyOpenSRs As List(Of tmSimpleThreatSR) = returnSRsOfStatus(projSRs)
 
+            Dim srsToClose As List(Of tmSimpleThreatSR) = New List(Of tmSimpleThreatSR)
             Console.WriteLine("Proj " + P.Id.ToString + ": " + P.Name + spaces(50 - Len(P.Name)) + "      Components: " + theProj.Nodes.Count.ToString + "  Threats: " + projThreats.Count.ToString + "/" + onlyMitigatedThreats.Count.ToString + " Mitigated     Requirements: " + projSRs.Count.ToString + "/" + onlyOpenSRs.Count.ToString + " Open")
 
             ' need to determine Threats eligible
             ' (1) Must be in a MITIGATED status (done by here)
-            ' (2) Should contain NOTE mentioning mitigation by control (this might require 1x API per call)
+            ' (2) Should contain NOTE mentioning mitigation by control (this might require 1x API per Threat)
             '
             ' need to determine SRs eligible for CLOSE
             ' Identify all SRs of a Threat
@@ -5694,12 +5764,65 @@ skipComp2:
             ' (2) Must be related to threat of same Component (threat.sourceid = sr.elementid)
             '            --- can simply trust labels because of #2, otherwise SR would not be part of component
 
+            For Each mitgT In onlyMitigatedThreats
+                Dim srsOfThreat As List(Of tmProjSecReq) = T.getSRsOfThreat(mitgT.ThreatId)
+                ' check to see if Mitigated by Security Control
+                If srsOfThreat.Count = 0 Then GoTo notThisThreat
+                Dim threatNotes As List(Of tmNote)
+                threatNotes = T.getNotesOfThreat(mitgT, P.Id)
+                Dim controlDetails As New controlAffect(threatNotes)
 
+                Dim firstSR As Boolean = True
+                If controlDetails.Action <> "Mitigated" Then
+                    'Console.WriteLine("Skipping threat as it was not mitigated by control")
+                    GoTo notThisThreat
+                End If
+
+                Console.WriteLine("Notes: " + threatNotes.Count.ToString + "  RECENT: " + controlDetails.Action + "  BY: " + controlDetails.ActionByName + "  DATE: " + controlDetails.ActionDate.ToString + "  CONTROL: " + controlDetails.Control)
+
+                For Each sr2 In onlyOpenSRs
+                    If sr2.ElementId <> mitgT.SourceId Then GoTo notThisSR
+                    Dim ndxOfNode = theProj.ndxOFnode(sr2.ElementId)
+
+                    If T.ndxSR(sr2.SecurityRequirementId, srsOfThreat) <> -1 Then
+                        srsToClose.Add(sr2)
+                        Dim fullname$ = ""
+                        With theProj.Nodes(ndxOfNode)
+                            fullname = .FullName + " [" + .Name + "]"
+                        End With
+                        Console.WriteLine(fullname + spaces(50 - Len(fullname)) + mitgT.ThreatName + spaces(30 - Len(mitgT.ThreatName)) + "  SR TO CLOSE: " + sr2.SecurityRequirementName + " [" + sr2.Id.ToString + "]")
+
+                        If doCSV Then
+                            '                Print(FF, "Project,SecurityControl,ThreatName,RequirementToClose,#TH,#SR" + vbCrLf)
+                            '            Print(FF, "Project,SecurityControl,Component,ThreatName,RequirementToClose,#TH,#SR" + vbCrLf)
+
+                            Dim numT$ = ""
+                            If firstSR = True Then
+                                numT = "1"
+                                firstSR = False
+                            Else
+                                numT = "0"
+                            End If
+                            ' SRID,STATID,PROJID
+                            Dim dFile$ = ""
+                            dFile = sr2.Id.ToString + ",5," + P.Id.ToString
+                            Print(FF, c + P.Name + " [" + P.Id.ToString + "]" + c + "," + c + controlDetails.Control + c + "," + c + fullname + c + "," + c + mitgT.ThreatName + " [" + mitgT.ThreatId.ToString + "]" + c + "," + c + sr2.SecurityRequirementName + " [" + sr2.SecurityRequirementId.ToString + "]" + c + "," + numT + ",1," + dFile + vbCrLf)
+                        End If
+
+
+                    End If
+notThisSR:
+
+                Next
+notThisThreat:
+            Next
 
 
 
 nextProj:
         Next
+
+        If doCSV = True Then FileClose(FF)
     End Sub
 
     Private Function returnThreatsOfStatus(listOfThreats As List(Of tmTThreat), Optional ByVal statuS$ = "Mitigated") As List(Of tmTThreat)
