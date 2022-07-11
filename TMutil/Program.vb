@@ -6449,6 +6449,7 @@ skipDept2:
         Console.WriteLine(fLine("compattr_mappings", "Use to create file comp_template_mappings file of attribute mapping"))
         Console.WriteLine(fLine("addcomp_comp", "text"))
         Console.WriteLine(fLine("sql_clean_roles_elements_widgets", "Produces SQL to clean out Entities & Labels"))
+        Console.WriteLine(fLine("close_control_srs", "Reports and/or closes SRs related to Threats mitigated by Security Controls, use arg: --PROJID id# --FILE (file) --MAKECHANGES true/false"))
 
         Console.WriteLine(vbCrLf + "Instance-to-Instance (use param --I2 (fqdn) for all calls)" + vbCrLf + "=================================================")
         Console.WriteLine(fLine("i2i_threatloop_addsr", "text"))
