@@ -123,7 +123,7 @@ skipIt:
                 End
 
 
-            Case "submitkiss"
+            Case "submitkis"
                 Dim modelName$ = argValue("modelname", args)
                 If modelName = "" Then
                     Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
@@ -3292,6 +3292,119 @@ nextItem2:
                 Next
                 End
 
+
+            Case "bulk_labels"
+                Dim compOnly As Boolean = False
+                Dim sRsOnly As Boolean = False
+                Dim reportOnly As Boolean = True
+                If LCase(argValue("compsonly", args)) = "true" Then compOnly = True
+                If LCase(argValue("srsonly", args)) = "true" Then sRsOnly = True
+                If LCase(argValue("rptonly", args)) = "false" Then reportOnly = False
+
+                Dim R As tfRequest
+                R = New tfRequest
+                With R
+                    .EntityType = "Components"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+                If sRsOnly = False Then T.lib_Comps = T.getTFComponents(R)
+                R.EntityType = "SecurityRequirements"
+                If compOnly = False Then T.lib_SR = T.getTFSecReqs(R)
+
+                Dim changeFile$ = ""
+                changeFile = argValue("changefile", args)
+
+                Console.WriteLine("Loaded Entities From Framework..")
+                Dim FF As Integer = 0
+                FF = FreeFile()
+                Dim a$ = ""
+
+                Dim oldLabels As New Collection
+                Dim newLabels As New Collection
+                Dim lLoop As Integer = 0
+
+                If changeFile <> "" Then
+                    If Dir(changeFile) = "" Then
+                        Console.WriteLine("Change file does not exist.. " + vbCrLf + "Looking for CSV file with format:" + vbCrLf + Chr(34) + "OLD LABEL" + Chr(34) + "," + Chr(34) + "NEW LABEL" + Chr(34))
+                        End
+                    End If
+                    FileOpen(FF, changeFile, OpenMode.Input)
+
+                    Dim lineOldNew() As String
+                    Do Until EOF(FF) = True
+                        a$ = LineInput(FF)
+                        lineOldNew = Split(a, ",")
+                        oldLabels.Add(Replace(lineOldNew(0), Chr(34), ""))
+                        newLabels.Add(Replace(lineOldNew(1), Chr(34), ""))
+                        Console.WriteLine(oldLabels(oldLabels.Count) + newLabels(oldLabels.Count))
+                    Loop
+                    Console.WriteLine(vbCrLf + vbCrLf + "OLD LABEL                                -----> NEW LABEL")
+                    Console.WriteLine("-------------------------------------------  --------------------------------------------")
+
+                    For lLoop = 1 To oldLabels.Count
+                        Console.WriteLine(oldLabels(lLoop) + spaces(43 - Len(oldLabels(lLoop))) + "  " + newLabels(lLoop))
+                    Next
+                    Console.WriteLine(oldLabels.Count.ToString + " labels will be found and replaced" + vbCrLf + vbCrLf)
+                End If
+
+                Dim countChanges As Integer = 0
+                Dim countCompChange As Integer = 0
+                Dim countSRChange As Integer = 0
+
+
+                If sRsOnly = True Then GoTo doSRsOnly
+
+                For Each comP In T.lib_Comps
+                    Dim origLabel$ = comP.Labels
+                    Dim newlabel$ = origLabel
+
+                    For lLoop = 1 To oldLabels.Count
+                        If InStr(comP.Labels, oldLabels(lLoop), vbTextCompare) Then
+                            'Console.WriteLine("Found " + oldLabels(lLoop) + " in COMPONENT: " + comP.Name + " [" + comP.Id.ToString + "]")
+                            newlabel = Replace(newlabel, oldLabels(lLoop), newLabels(lLoop))
+                            countChanges += 1
+                        End If
+                    Next
+
+                    If origLabel <> newlabel Then
+                        countCompChange += 1
+                        comP.Labels = newlabel
+                        Dim cLine$ = "COMPONENT: " + comP.Name + " [" + comP.Id.ToString + "]: OLD:" + origLabel + " NEW:" + newlabel
+                        If reportOnly = False Then cLine += "  >>>>>>> CHANGED: " + T.editCOMP(comP, "TF_COMPONENT_UPDATED").ToString
+
+                        Console.WriteLine(cLine)
+                    End If
+                Next
+
+doSRsOnly:
+                If compOnly = True Then GoTo skipLabelSRs
+                'GoTo skipLabelSRs
+                For Each sr In T.lib_SR
+                    Dim origLabel$ = sr.Labels
+                    Dim newlabel$ = origLabel
+                    For lLoop = 1 To oldLabels.Count
+                        If InStr(sr.Labels, oldLabels(lLoop), vbTextCompare) Then
+                            'Console.WriteLine("Found " + oldLabels(lLoop) + " in REQUIREMENT: " + sr.Name + " [" + sr.Id.ToString + "]")
+                            newlabel = Replace(newlabel, oldLabels(lLoop), newLabels(lLoop))
+                            countChanges += 1
+                        End If
+                    Next
+                    If origLabel <> newlabel Then
+                        countSRChange += 1
+                        sr.Labels = newlabel
+                        Dim cline$ = "REQUIREMENT: " + sr.Name + " [" + sr.Id.ToString + "]: OLD:" + origLabel + " NEW:" + newlabel
+                        If reportOnly = False Then cline += "  >>>>>>>> CHANGED: " + T.addEditSR(sr)
+
+                        Console.WriteLine(cline)
+                    End If
+                Next
+
+skipLabelSRs:
+                Console.WriteLine(vbCrLf + vbCrLf + "# of changes made: " + countChanges.ToString + "  COMPS: " + countCompChange.ToString + " SRs: " + countSRChange.ToString)
+
+                End
+
             Case "i2i_add_srs"
                 Dim i1 = argValue("i1", args)
                 Dim i2 = argValue("i2", args)
@@ -6439,6 +6552,7 @@ skipDept2:
         Console.WriteLine(fLine("comp_compare", "text"))
         Console.WriteLine(fLine("find_dups", "Shows duplicates of entity object - with ATTR gives SQL for deletion, require --ENTITY (threats/securityreq..etc)"))
 
+        Dim c$ = Chr(34)
 
         Console.WriteLine(vbCrLf + "Local TF Editing" + vbCrLf + "==============================")
         Console.WriteLine(fLine("addcomp_threat", "Add a Threat and choose SRs for a Component, use arg: --ID (component ID) or --NAME (component name)) --THREATID (id)"))
@@ -6450,6 +6564,9 @@ skipDept2:
         Console.WriteLine(fLine("addcomp_comp", "text"))
         Console.WriteLine(fLine("sql_clean_roles_elements_widgets", "Produces SQL to clean out Entities & Labels"))
         Console.WriteLine(fLine("close_control_srs", "Reports and/or closes SRs related to Threats mitigated by Security Controls, use arg: --PROJID id# --FILE (file) --MAKECHANGES true/false"))
+        Console.WriteLine(fLine("change_labels", "Change COMPONENT and REQUIREMENT labels, use arg: --CURRENT 'label to find' --NEW 'new label'"))
+        Console.WriteLine(fLine("bulk_labels", "Change COMPONENT and REQUIREMENT labels from a CSV file of " + c + "OLD" + c + "," + c + "NEW" + c + ", use arg: --CHANGEFILE filename, OPT --COMPSONLY false, --SRSONLY false"))
+
 
         Console.WriteLine(vbCrLf + "Instance-to-Instance (use param --I2 (fqdn) for all calls)" + vbCrLf + "=================================================")
         Console.WriteLine(fLine("i2i_threatloop_addsr", "text"))

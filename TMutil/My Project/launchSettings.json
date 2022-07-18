@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "close_control_srs --file importfile_sr2close.csv --makechanges true"
+      "commandLineArgs": "bulk_labels --changefile labels2change.csv --rptonly true"
     }
   }
 }
