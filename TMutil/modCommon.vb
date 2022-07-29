@@ -467,7 +467,44 @@ dontEvalCase:
         Next
 
     End Function
+    Public Function csvObject(csv$, objNum As Integer) As String
+        Dim inQuotes As Boolean = False
+        Dim numObj As Integer = 0
 
+        Dim K As Integer = 0
+        Dim a$ = ""
+        Dim theStr$ = ""
+
+        For K = 1 To Len(csv)
+            a$ = Mid(csv, K, 1)
+            If a = Chr(34) Then
+                If inQuotes = False Then
+                    inQuotes = True
+                Else
+                    inQuotes = False
+                End If
+            End If
+
+            If a = "," Or K = Len(csv) Then
+                If inQuotes = False Then
+                    If numObj = objNum Then
+                        If K = Len(csv) Then theStr += a
+                        If Len(theStr) Then
+                            If Mid(theStr, Len(theStr), 1) = "," Then theStr = Mid(theStr, 1, Len(theStr) - 1)
+                        End If
+                        Return Replace(theStr, Chr(34), "")
+                    End If
+                    theStr = ""
+                    numObj += 1
+                    GoTo nextChr
+                End If
+            End If
+            theStr += a
+nextChr:
+        Next
+
+        Return theStr
+    End Function
 
     Public Function CSVFiletoCOLL(ByRef csV$) As Collection
         CSVFiletoCOLL = New Collection

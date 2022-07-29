@@ -122,6 +122,60 @@ skipIt:
                 If Len(fileN) Then FileClose(FF)
                 End
 
+            Case "csvmodel"
+                Console.WriteLine("CSV Import File must include the following fields, in this order (recommend saving from Excel):" + vbCrLf + "ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes" + vbCrLf)
+                Dim modelName$ = argValue("modelname", args)
+                If modelName = "" Then
+                    Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
+
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                    End
+                End If
+
+                Dim R As New tfRequest
+
+                With R
+                    .EntityType = "Components"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+                T.lib_Comps = T.getTFComponents(R)
+                Console.WriteLine("Loaded comps: " + T.lib_Comps.Count.ToString)
+
+                Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+                jsonObj = csv2JSON(fileN)
+
+                If jsonObj.Count = 0 Then
+                    Console.WriteLine("ERROR: No objects built from CSV - Aborting")
+                    End
+                End If
+
+                Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+                safeKILL(fileN + ".json")
+                saveJSONtoFile(jsonFile, fileN + ".json")
+                fileN += ".json"
+
+
+                Dim modelNum As Integer
+                Dim result2$ = T.createKISSmodelForImport(modelName)
+                modelNum = Val(result2)
+                If modelNum = 0 Then
+                    Console.WriteLine("Unable to create project - " + result2)
+                    End
+                End If
+                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+                Dim resP$ = T.importKISSmodel(fileN, modelNum)
+                If Mid(resP, 1, 5) = "ERROR" Then
+                    Console.WriteLine(resP)
+                Else
+                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End If
+                End
 
             Case "submitkis"
                 Dim modelName$ = argValue("modelname", args)
@@ -6487,6 +6541,67 @@ skipDept2:
         addTF_Attr = True
     End Function
 
+    Private Function csv2JSON(csvFile$) As List(Of appScan.makeTMJson.tmObject)
+        csv2JSON = New List(Of appScan.makeTMJson.tmObject)
+        'ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes
+
+        Dim myJsonObjects As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+
+        If Dir(csvFile) = "" Then Exit Function
+
+
+
+        Dim linesOfCSV As New Collection
+        linesOfCSV = CSVFiletoCOLL(csvFile)
+
+        For Each C In linesOfCSV
+            If InStr(C, "ObjectId,ObjectName,") <> 0 Then GoTo skipHeader
+
+            Dim findCompNdx As Integer
+            findCompNdx = T.ndxCompbyName(csvObject(C, 1))
+
+            If findCompNdx = -1 Then
+                Console.WriteLine("Cannot find object '" + csvObject(C, 1) + "' - skipping")
+                GoTo skipHeader
+            End If
+
+            Dim newJS As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+            With newJS
+                .Name = csvObject(C, 2)
+                .ComponentGuid = T.lib_Comps(findCompNdx).Guid.ToString
+                .ObjectId = Val(csvObject(C, 0))
+                .ObjectType = csvObject(C, 3)
+                .ParentGroupId = Val(csvObject(C, 4))
+                .Notes = csvObject(C, 7)
+
+                Dim pNum As Integer = 0
+                Dim outboundIds$ = csvObject(C, 5)
+                If Len(outboundIds) Then
+                    For Each outBid In CSVtoCOLL(outboundIds)
+                        'pNum += 1
+                        .OutBoundId.Add(Val(outBid))
+                    Next
+                End If
+
+                If Len(outboundIds) Then
+                    For Each outProt In CSVtoCOLL(csvObject(C, 6))
+                        Dim protID As Integer
+                        protID = T.ndxCompbyName(outProt, "Protocols")
+                        If protID = -1 Or outProt = "" Then
+                            .OutBoundGuids.Add("")
+                        Else
+                            .OutBoundGuids.Add(T.lib_Comps(protID).Guid.ToString)
+                        End If
+                    Next
+                End If
+            End With
+            myJsonObjects.Add(newJS)
+skipHeader:
+        Next
+
+        Return myJsonObjects
+
+    End Function
     Private Function findLocalMatch(cID As Integer, cNAME$) As tmComponent
         Dim ndxC As Integer = 0
         findLocalMatch = New tmComponent
@@ -6524,6 +6639,12 @@ skipDept2:
         Console.WriteLine(fLine("show_aws_iam", "Show all available AWS IAM accounts"))
         Console.WriteLine(fLine("show_vpc", "Show VPCs of an account, arg: --AWSID (Id)"))
         Console.WriteLine(fLine("create_vpc_model", "Create a model from a VPC, arg: --VPCID (Id)"))
+
+        Console.WriteLine(vbCrLf + "KIS Auto Modeling" + vbCrLf + "==============================")
+        Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
+        Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
+        Console.WriteLine(fLine("appscan", "Code Parse to build Threat Models of source code - abandoned use case"))
+
 
         Console.WriteLine(vbCrLf + "User Mgmt/RBAC" + vbCrLf + "==============================")
         Console.WriteLine(fLine("get_users", "Returns Users, OPTIONAL --FILE (csv filename), --DEPT (id), --LASTLOGIN (days since last login)"))

@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "bulk_labels --changefile labels2change.csv --rptonly true"
+      "commandLineArgs": "csvmodel --file simple_activepassive.csv --modelname Example127861872"
     }
   }
 }

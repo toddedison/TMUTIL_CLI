@@ -2231,7 +2231,7 @@ skipThose:
 
 
 
-    Public Function ndxCompbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
+    Public Function ndxCompbyName(name$, Optional ByVal typeOnly$ = "") As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxCompbyName = -1
 
         'had to change this as passing byref from multi-threaded main causing issues
@@ -2239,10 +2239,14 @@ skipThose:
         Dim ndX As Integer = 0
         For Each P In lib_Comps
             If LCase(P.Name) = LCase(name) Then
-                Return ndX
-                Exit Function
-            End If
-            ndX += 1
+                If Len(typeOnly) Then
+                    If LCase(P.ComponentTypeName) <> LCase(typeOnly) Then GoTo nextInList
+                End If
+                    Return ndX
+                    Exit Function
+                End If
+nextInList:
+                ndX += 1
         Next
 
     End Function
