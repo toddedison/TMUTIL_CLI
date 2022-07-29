@@ -743,7 +743,7 @@ skipSR:
 
                 For Each D In allDepts
                     If deptId Then
-                        If deptId <> D.Id Then GoTo skipDept1
+                        If deptId <> D.Id Then GoTo skipDEPT1
                     End If
                     allUsers = T.getUsers(D.Id)
                     For Each P In allUsers
@@ -4571,16 +4571,16 @@ skipLoad:
         If showD Then
 
             With C1
-            showLines.Add("#1     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
-        End With
-        showLines.Add(vbCrLf + vbCrLf + "============> " + T2.tmFQDN + " <============")
-        showLines.Add(C2.CompName + " [" + C2.CompID.ToString + "]      Library: " + C2.LibraryId.ToString)
-        showLines.Add("LABELS " + C2.Labels)
-        ' showLines.Add("DESC   " + C2.Description)
-        With C2
-            showLines.Add("#2     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
-        End With
-        showLines.Add(vbCrLf + vbCrLf + "===============================")
+                showLines.Add("#1     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
+            End With
+            showLines.Add(vbCrLf + vbCrLf + "============> " + T2.tmFQDN + " <============")
+            showLines.Add(C2.CompName + " [" + C2.CompID.ToString + "]      Library: " + C2.LibraryId.ToString)
+            showLines.Add("LABELS " + C2.Labels)
+            ' showLines.Add("DESC   " + C2.Description)
+            With C2
+                showLines.Add("#2     " + .Name + spaces(50 - Len(.CompName)) + .listThreats.Count.ToString + " Threats, " + .listDirectSRs.Count.ToString + " Direct SRs, " + .listTransSRs.Count.ToString + " Transitive SRs" + ", " + .listAttr.Count.ToString + " Attr")
+            End With
+            showLines.Add(vbCrLf + vbCrLf + "===============================")
 
         End If
 
@@ -5423,7 +5423,7 @@ nope:
 
         If targetID <> 0 Then
             ' we need to add a suffix to the name and/or hide the original
-            Call removeallSRfromcomp(destC, T2)
+            Call removeAllSRFromComp(destC, T2)
 
             Console.WriteLine("Hiding original component at " + T2.tmFQDN + "- " + T2.hideItem(destC).ToString)
             C.IsHidden = False
@@ -5433,7 +5433,7 @@ nope:
         Console.WriteLine(C.CompName + " [" + C.CompID.ToString + "] - ADDING: " + T2.addEditCOMP(C,, targetLIBid, targetCompTypeId, cTypeS).ToString)
         Call loadNTY(T2, "Components")
 
-            destC = T2.bestMatch(C)
+        destC = T2.bestMatch(C)
 
 
 haveDestC:
@@ -6220,7 +6220,7 @@ skipDEPT2:
             For Each U In modelPerms.Users
                 usrStr += U.Name + " [" + U.permString + "],"
             Next
-            usrstr = Mid(usrstr, 1, Len(usrstr) - 1)
+            usrStr = Mid(usrStr, 1, Len(usrStr) - 1)
 
             Console.WriteLine(P.Name + spaces(40 - Len(P.Name)) + P.CreatedByName + spaces(30 - Len(P.CreatedByName)) + "Groups: " + grpStr + " Users: " + usrStr)
             If doCSV = True Then Print(FF, c$ + P.Name + c$ + "," + c$ + P.CreatedByName + c$ + "," + c$ + grpStr + c$ + "," + c$ + usrStr + c$ + vbCrLf)
@@ -6301,7 +6301,7 @@ skipDEPT2:
 
         For Each D In DP
             If deptId Then
-                If deptId <> D.Id Then GoTo skipDEPT2
+                If deptId <> D.Id Then GoTo skipDept2
             End If
             Dim allUsers As List(Of tmUser) = T.getUsers(D.Id)
 
