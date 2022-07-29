@@ -697,7 +697,7 @@ skipSR:
                 Dim GG As List(Of tmGroups)
                 GG = T.getGroups()
                 For Each G In GG
-                    Console.WriteLine(fLine("Id:" + G.Id.ToString, G.Name))
+                    Console.WriteLine(fLine("Id:" + G.Id.ToString, "Dept:" + G.DepartmentId.ToString + "     " + G.Name))
                 Next
                 End
 
@@ -1625,6 +1625,9 @@ dontDOit:
                     FileClose(FF)
                 End If
                 Console.WriteLine(vbCrLf)
+
+                If showUsage = False Then End
+
                 Dim kLoop As Integer = 0
                 For kLoop = 0 To T.librarieS.Count - 1
                     Console.WriteLine(T.librarieS(kLoop).Name + " [" + T.librarieS(kLoop).Id.ToString + "]: " + usageLibCounts(kLoop).ToString)
@@ -6565,7 +6568,7 @@ skipDept2:
         Console.WriteLine(fLine("sql_clean_roles_elements_widgets", "Produces SQL to clean out Entities & Labels"))
         Console.WriteLine(fLine("close_control_srs", "Reports and/or closes SRs related to Threats mitigated by Security Controls, use arg: --PROJID id# --FILE (file) --MAKECHANGES true/false"))
         Console.WriteLine(fLine("change_labels", "Change COMPONENT and REQUIREMENT labels, use arg: --CURRENT 'label to find' --NEW 'new label'"))
-        Console.WriteLine(fLine("bulk_labels", "Change COMPONENT and REQUIREMENT labels from a CSV file of " + c + "OLD" + c + "," + c + "NEW" + c + ", use arg: --CHANGEFILE filename, OPT --COMPSONLY false, --SRSONLY false"))
+        Console.WriteLine(fLine("bulk_labels", "Change COMPONENT and REQUIREMENT labels from a CSV file of " + c + "OLD" + c + "," + c + "NEW" + c + ", use arg: --CHANGEFILE filename, OPT --COMPSONLY false, --SRSONLY false, --RPTONLY true"))
 
 
         Console.WriteLine(vbCrLf + "Instance-to-Instance (use param --I2 (fqdn) for all calls)" + vbCrLf + "=================================================")
