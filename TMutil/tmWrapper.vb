@@ -582,7 +582,25 @@ errorcatch:
         Dim json$ = getAPIData("/api/threatframework/updateproperty", True, jBody)
 
     End Sub
+    Public Sub createUser(Username$, Optional ByVal Name$ = "", Optional ByVal Email$ = "", Optional ByVal sendEmail As Boolean = True, Optional ByVal DeptID As Integer = 1, Optional ByVal RoleID As Integer = -1)
+        'createUser = False
+        '/api/user/create
+        Dim newU As newUserJSON = New newUserJSON
 
+        With newU
+            .Username = Username
+            If Len(Name) Then .Name = Name Else .Name = Username
+            If Len(Email) Then .Email = Email Else .Email = Username
+            .ReceiveLicenseEmailNotification = sendEmail
+            .UserRoleId = RoleID
+            .DepartmentId = DeptID
+        End With
+
+        Dim jBody$ = JsonConvert.SerializeObject(newU)
+        Dim json$ = getAPIData("/api/user/create", True, jBody)
+
+        'Username = "121313"
+    End Sub
     Public Function createKISSmodelForImport(modelName$, Optional ByVal riskId As Integer = 1, Optional ByVal versioN As Integer = 1, Optional ByVal labelS$ = "", Optional ByVal modelType$ = "Others", Optional ByVal importType$ = "Kis") As String
         '{"Id":0,
         '"Name""test_meth_inst2",
@@ -2500,6 +2518,15 @@ Public Class tfRequest
     Public ShowHidden As Boolean
 End Class
 
+Public Class newUserJSON
+    '{"DepartmentId":1,"UserRoleId":-1,"Name":"testname","Username":"testusername","Email":"testusername@email.com","ReceiveLicenseEmailNotification":true}
+    Public DepartmentId As Integer
+    Public UserRoleId As Integer
+    Public Name As String
+    Public Username As String
+    Public Email As String
+    Public ReceiveLicenseEmailNotification As Boolean
+End Class
 Public Class threatStatusUpdate
     Public Id As Long
     Public ThreatId As Long

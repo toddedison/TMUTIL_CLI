@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "csvmodel --file simple_activepassive.csv --modelname Example127861872"
+      "commandLineArgs": "add_users --file newc1users.csv"
     }
   }
 }

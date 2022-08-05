@@ -122,8 +122,22 @@ skipIt:
                 If Len(fileN) Then FileClose(FF)
                 End
 
+            Case "add_users"
+                Dim fileN$ = argValue("file", args)
+                Dim fromFile As Boolean = False
+                If Dir(fileN) = "" Or fileN = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                    Console.WriteLine("CSV Import requires only 1 field, which is treated as Username, Name and Email. If specifying, include HEADER line with any of the following: Username,Name,Email,DeptID,RoleID")
+                    End
+                Else
+                    fromFile = True
+                    Call createUsersFromFile(fileN)
+                End If
+
+                End
+
             Case "csvmodel"
-                Console.WriteLine("CSV Import File must include the following fields, in this order (recommend saving from Excel):" + vbCrLf + "ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes" + vbCrLf)
+                Console.WriteLine("CSV Import File must include the following fields, in this order (recommend saving from Excel) : " + vbCrLf + "ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes" + vbCrLf)
                 Dim modelName$ = argValue("modelname", args)
                 If modelName = "" Then
                     Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
@@ -6277,7 +6291,7 @@ skipDEPT2:
             For Each U In modelPerms.Users
                 usrStr += U.Name + " [" + U.permString + "],"
             Next
-            usrStr = Mid(usrStr, 1, Len(usrStr) - 1)
+            If Len(usrStr) Then usrStr = Mid(usrStr, 1, Len(usrStr) - 1)
 
             Console.WriteLine(P.Name + spaces(40 - Len(P.Name)) + P.CreatedByName + spaces(30 - Len(P.CreatedByName)) + "Groups: " + grpStr + " Users: " + usrStr)
             If doCSV = True Then Print(FF, c$ + P.Name + c$ + "," + c$ + P.CreatedByName + c$ + "," + c$ + grpStr + c$ + "," + c$ + usrStr + c$ + vbCrLf)
@@ -6627,6 +6641,85 @@ skipHeader:
 
         Return C
     End Function
+
+    Public Sub createUsersFromFile(fileN$)
+        Dim FF As Integer
+        FF = FreeFile()
+        FileOpen(FF, fileN, OpenMode.Input)
+
+        Dim firstLine$ = ""
+        Dim isHeader As Boolean = False
+        firstLine = LineInput(FF)
+        Dim headerC As Collection = New Collection
+
+        'Console.WriteLine("HEADER line with any of the following: Username,Name,Email,DeptID,RoleID")
+
+        Dim emailNDX As Integer = 0
+        Dim nameNDX As Integer = 0
+        Dim UsernameNDX As Integer = 0
+        Dim DeptNDX As Integer = 0
+        Dim RoleNDX As Integer = 0
+
+        If InStr(firstLine, "Username") Or InStr(firstLine, "Name") Or InStr(firstLine, "Email") Or InStr(firstLine, "DeptID") Or InStr(firstLine, "RoleID") Then
+            isHeader = True
+            headerC = CSVtoCOLL(firstLine)
+            emailNDX = grpNDX(headerC, "Email")
+            nameNDX = grpNDX(headerC, "Name")
+            UsernameNDX = grpNDX(headerC, "Username")
+            DeptNDX = grpNDX(headerC, "DeptID")
+            RoleNDX = grpNDX(headerC, "RoleID")
+
+            'some headers provided
+            If emailNDX = 0 Then
+                Console.WriteLine("When using headers, you must include one for 'Email'.")
+                GoTo cannotImport
+            End If
+        Else
+            Console.WriteLine("ADDING USER: " + firstLine)
+            'Call T.createUser(firstLine)
+        End If
+
+        Dim a$ = ""
+        Do Until EOF(FF) = True
+            a$ = LineInput(FF)
+            If isHeader = False Then
+                Console.WriteLine("ADDING USER: " + a)
+                T.createUser(a)
+                GoTo doneHere
+            End If
+            '(Username$, Optional ByVal corpID As Integer = 1, Optional ByVal Name$ = "", Optional ByVal Email$ = "", Optional ByVal sendEmail As Boolean = True, Optional ByVal DeptID As Integer = 1, Optional ByVal RoleID As Integer = -1)
+            'With newU
+            '    .Username = username
+            '    If Len(Name) Then .Name = Name Else .Name = username
+            '    If Len(email) Then .Email = Name Else .Email = username
+            '    .ReceiveLicenseEmailNotification = sendEmail
+            '    .UserRoleId = RoleID
+            '    .DepartmentId = DeptID
+            'End With
+
+            Dim employee() As String = Split(a, ",")
+
+            Dim username$ = ""
+            Dim email$ = ""
+            Dim name$ = ""
+            Dim deptID As Integer = 1
+            Dim roleID As Integer = -1
+
+            email = employee(emailNDX - 1)
+
+            If UsernameNDX = 0 Then username = email Else username = employee(UsernameNDX - 1)
+            If nameNDX = 0 Then name = email Else name = employee(nameNDX - 1)
+            If DeptNDX = 0 Then deptID = 1 Else deptID = Val(employee(DeptNDX - 1))
+            If RoleNDX = 0 Then roleID = -1 Else roleID = Val(employee(RoleNDX - 1))
+
+            Console.WriteLine("UN:" + username + " | NA:" + name + " | EM:" + email + " | DP: " + deptID.ToString + " | RO:" + roleID.ToString)
+            T.createUser(username, name, email, True, deptID, roleID)
+doneHere:
+        Loop
+
+cannotImport:
+        FileClose(FF)
+    End Sub
     Private Sub giveHelp()
         Console.WriteLine("USAGE: TMCLI action --param1 param1_value --param2 param2_value" + vbCrLf)
         Console.WriteLine("ACTIONS:")
@@ -6651,6 +6744,7 @@ skipHeader:
         Console.WriteLine(fLine("user_libs", "Returns User access to TF Libraries, OPTIONAL --FILE (csv filename), --DEPT (id)"))
         Console.WriteLine(fLine("user_groups", "Returns User access to TF Groups, OPTIONAL --FILE (csv filename), --DEPT (id)"))
         Console.WriteLine(fLine("model_perms", "Returns Threat Model access by Groups and Users, OPTIONAL --FILE (csv filename)"))
+        Console.WriteLine(fLine("add_users", "Adds users from TXT/CSV file, REQUIRED --FILE (csv filename)"))
 
 
         Console.WriteLine(vbCrLf + "Instance Info" + vbCrLf + "==============================")
