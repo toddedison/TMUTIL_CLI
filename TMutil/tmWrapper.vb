@@ -663,6 +663,17 @@ errorcatch:
         Return json
     End Function
 
+    Public Function grandModelAccess(modelID As Integer, groupList As List(Of groupPermsJSON)) As Boolean
+        Dim newAccess As grantAccessReq = New grantAccessReq
+        newAccess.Id = modelID
+        newAccess.GroupPermissions = groupList
+
+        Dim jBody$ = JsonConvert.SerializeObject(newAccess)
+        Dim json$ = getAPIData("/api/project/grantaccess", True, jBody)
+        If InStr(json, "ERROR") Then grandModelAccess = False Else grandModelAccess = True
+
+    End Function
+
     Public Function addEditTH(TH As tmProjThreat) As String
         addEditTH = ""
         Dim P As New updateEntityObject
@@ -1978,6 +1989,32 @@ skipThose:
         'getGroups = JsonConvert.DeserializeObject(Of List(Of tmGroups))(jsoN)
     End Sub
 
+    Public Function ndxGroupByName(ByVal grpName$, ByRef G As List(Of tmGroups)) As Integer
+        'finds object (for now, the node of a model) matching idOFnode
+        Dim K As Long = 0
+
+        For Each N In G
+            If LCase(N.Name) = LCase(grpName) Then
+                Return K
+            End If
+            K += 1
+        Next
+
+        Return -1
+    End Function
+
+    Public Function projOfNDX(ByVal ID As Integer, ByRef P As List(Of tmProjInfo)) As tmProjInfo
+        projOfNDX = New tmProjInfo
+
+        For Each N In P
+            If N.Id = ID Then
+                Return N
+            End If
+        Next
+
+    End Function
+
+
     Public Function ndxVPC(ByVal vpcID As Long, ByRef VPCs As List(Of tmVPC)) As Integer
         'finds object (for now, the node of a model) matching idOFnode
         Dim K As Long = 0
@@ -2370,10 +2407,7 @@ Public Class permInfo
     Public Permission As Integer
 
     Public Function permString() As String
-        permString = ""
-        If Me.Permission = 2 Then permString = "AD"
-        If Me.Permission = 1 Then permString = "RW"
-        If Me.Permission = 0 Then permString = "RO"
+        Return getPermString(Me.Permission)
     End Function
 End Class
 
@@ -2518,6 +2552,48 @@ Public Class tfRequest
     Public ShowHidden As Boolean
 End Class
 
+Public Class groupPermsJSON
+
+    '{
+    ' "Id": 2074,
+    ' "GroupPermissions": [
+    '   {
+    '     "Id": 43,
+    '     "Email": null,
+    '     "Name":  "R&D",
+    ''     "Permission": 1,
+    '     "Type": "Groups",
+    '     "GroupId": 43
+    '   },
+    '    {
+    '      "Id": 50,
+    '      "Email": null,
+    '      "Name":  "Patrick Group",
+    '      "Permission": 2,
+    '      "Type": "Groups",
+    '      "GroupId": 50
+    '    }
+    '  ],
+    '  "UserPermissions": []
+    '
+    Public Id As Integer
+    Public Email As String
+    Public Name As String
+    Public Permission As Integer
+    Public [Type] As String
+    Public GroupId As Integer
+End Class
+
+Public Class grantAccessReq
+    Public Id As Integer
+    Public GroupPermissions As List(Of groupPermsJSON)
+    Public UserPermissions As List(Of groupPermsJSON)
+
+    Public Sub New()
+        GroupPermissions = New List(Of groupPermsJSON)
+        UserPermissions = New List(Of groupPermsJSON)
+    End Sub
+End Class
 Public Class newUserJSON
     '{"DepartmentId":1,"UserRoleId":-1,"Name":"testname","Username":"testusername","Email":"testusername@email.com","ReceiveLicenseEmailNotification":true}
     Public DepartmentId As Integer

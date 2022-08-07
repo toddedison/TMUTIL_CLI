@@ -122,6 +122,208 @@ skipIt:
                 If Len(fileN) Then FileClose(FF)
                 End
 
+            Case "add_model_access"
+                Dim byMethod$ = argValue("method", args)
+                If byMethod = "" Or byMethod <> "user" Then
+                    Console.WriteLine("Must specify the method by which models are selected - use '--method user' to modify all models created by a certain user")
+                    End
+                End If
+
+                Dim byUserName$ = argValue("name", args)
+                Dim byUserEmail$ = argValue("email", args)
+                If byUserName = "" And byUserEmail = "" Then
+                    Console.WriteLine("With USER method, you must specify model's creator by --name or --email")
+                    End
+                End If
+
+                Dim allDepts As List(Of tmDept) = T.getDepartments
+                Dim allUsers As List(Of tmUser) = New List(Of tmUser)
+
+                Dim userID As Integer = 0
+                Dim usersDeptId As Integer = 0
+                Dim deptName$ = ""
+                Dim usersName$ = ""
+
+                For Each DD In allDepts
+                    allUsers = T.getUsers(DD.Id)
+                    For Each U In allUsers
+                        If LCase(U.Name) = LCase(byUserName) Or LCase(U.Email) = LCase(byUserEmail) Then
+                            usersDeptId = DD.Id
+                            userID = U.Id
+                            deptName = DD.Name
+                            usersName = U.Name
+                        End If
+                    Next
+                Next
+
+                If usersDeptId = 0 Or userID = 0 Then
+                    Console.WriteLine("ERROR: Unable to locate user in any department. Aborting.")
+                    End
+                Else
+                    Console.WriteLine("Found User ID " + userID.ToString + " inside Department #" + usersDeptId.ToString + ": " + deptName)
+                End If
+
+                Dim usrID As Integer = 0
+                Dim grp1$ = argValue("grp1", args)
+                Dim grp1perm$ = argValue("perm1", args)
+                Dim grp2$ = argValue("grp2", args)
+                Dim grp2perm$ = argValue("perm2", args)
+                Dim grp3$ = argValue("grp3", args)
+                Dim grp3perm$ = argValue("perm3", args)
+
+                If grp1 = "" Or grp1perm = "" Then
+                    Console.WriteLine(vbCrLf + "Must specify at least 1 group to add to models, and can specify as many as 3. You must include the permission as RO,RW or AD.")
+                    Console.WriteLine("Example:" + vbCrLf + "tmutil add_model_access --method user --name " + Chr(34) + "Mike Horty" + Chr(34) + " --grp1 " + Chr(34) + "Group 1" + Chr(34) + " --perm1 RO" + " --grp2 " + Chr(34) + "Group 2" + Chr(34) + " --perm2 AD")
+                    Console.WriteLine("This command looks up models created by user 'Mike Horty', gives RO (Read Only) access to 'Group 1' and AD (Admin) access to 'Group 2'." + vbCrLf + "You can also specify user as --email emailaddress.")
+                    End
+                End If
+
+                Dim GG As List(Of tmGroups) = T.getGroups()
+
+                Dim grp1NDX As Integer = -1
+                Dim grp2NDX As Integer = -1
+                Dim grp3NDX As Integer = -1
+                Dim numGroups As Integer = 1
+
+                grp1NDX = T.ndxGroupByName(grp1, GG)
+                grp2NDX = T.ndxGroupByName(grp2, GG)
+                grp3NDX = T.ndxGroupByName(grp3, GG)
+
+                If grp1NDX = -1 Then
+                    Console.WriteLine("ERROR: Group '" + grp1 + "' not found. Aborting.")
+                    End
+                End If
+                If usersDeptId <> GG(grp1NDX).DepartmentId Then
+                    Console.WriteLine("Group 1: " + GG(grp1NDX).Name + " is part of Department: " + GG(grp1NDX).Department + " - not " + deptName + ". Aborting.")
+                    End
+                End If
+
+                If Len(grp2) Then
+                    numGroups += 1
+                    If grp2NDX = -1 Then
+                        Console.WriteLine("ERROR: Group '" + grp2 + "' not found. Aborting.")
+                        End
+                    End If
+                    If usersDeptId <> GG(grp2NDX).DepartmentId Then
+                        Console.WriteLine("Group 2: " + GG(grp2NDX).Name + " is part of Department: " + GG(grp2NDX).Department + " - not " + deptName + ". Aborting.")
+                        End
+                    End If
+                End If
+                If Len(grp3) Then
+                    numGroups += 1
+                    If grp3NDX = -1 Then
+                        Console.WriteLine("ERROR: Group '" + grp3 + "' not found. Aborting.")
+                        End
+                    End If
+                    If usersDeptId <> GG(grp3NDX).DepartmentId Then
+                        Console.WriteLine("Group 1: " + GG(grp3NDX).Name + " is part of Department: " + GG(grp3NDX).Department + " - not " + deptName + ". Aborting.")
+                        End
+                    End If
+                End If
+
+                Dim grpLoop As Integer = 0
+                For grpLoop = 1 To numGroups
+                    Dim permsOK As Boolean = True
+                    Select Case grpLoop
+                        Case 1
+                            If LCase(grp1perm) <> "ro" And LCase(grp1perm) <> "rw" And LCase(grp1perm) <> "ad" Then permsOK = False
+                        Case 2
+                            If LCase(grp2perm) <> "ro" And LCase(grp2perm) <> "rw" And LCase(grp2perm) <> "ad" Then permsOK = False
+                        Case 3
+                            If LCase(grp3perm) <> "ro" And LCase(grp3perm) <> "rw" And LCase(grp3perm) <> "ad" Then permsOK = False
+                    End Select
+                    If permsOK = False Then
+                        Console.WriteLine("You must state permissions for each --GRP# specified as either RO, RW or AD for Read-Only, Read-Write and Admin.")
+                        End
+                    End If
+                Next
+
+                Dim PP As List(Of tmProjInfo)
+                PP = T.getAllProjects()
+
+                Dim projIDs As Collection = New Collection
+
+                For Each P In PP
+                    If LCase(P.CreatedByName) = LCase(usersName) Then
+                        projIDs.Add(P.Id)
+                    End If
+                Next
+
+                Console.WriteLine("Found " + projIDs.Count.ToString + " models by this User")
+
+                ' go through each model
+                ' build grouplist from grp1/2/3 for each group not already present
+                ' call grantmodelaccess with groups and model ID
+
+                For Each M In projIDs
+                    Dim modelPerms As tm_userGroupPermissions = T.getPermissionsOfModel(M)
+
+                    Dim grpList As List(Of groupPermsJSON) = New List(Of groupPermsJSON)
+
+                    Dim hasAccess(2) As Boolean
+                    hasAccess(0) = False : hasAccess(1) = False : hasAccess(2) = False
+                    For Each modGrp In modelPerms.Groups
+                        For Each grpID In modelPerms.Groups
+                            If grpID.Id = GG(grp1NDX).Id Then hasAccess(0) = True
+                            If grp2NDX <> -1 Then
+                                If grpID.Id = GG(grp2NDX).Id Then hasAccess(1) = True
+                            End If
+                            If grp3NDX <> -1 Then
+                                If grpID.Id = GG(grp3NDX).Id Then hasAccess(2) = True
+                            End If
+                        Next
+                    Next
+
+                    If hasaccess(0) = False Then
+                        Dim nAcc As groupPermsJSON = New groupPermsJSON
+                        With GG(grp1NDX)
+                            nAcc.Id = .Id
+                            nAcc.GroupId = .Id
+                            nAcc.Name = .Name
+                            nAcc.Permission = returnPermID(grp1perm)
+                            nAcc.Type = "Groups"
+                            nAcc.Email = Nothing
+                        End With
+                        grpList.Add(nAcc)
+                    End If
+
+                    If grp2NDX = -1 Then GoTo tryGroup3
+
+                    If hasAccess(1) = False Then
+                        Dim nAcc As groupPermsJSON = New groupPermsJSON
+                        With GG(grp2NDX)
+                            nAcc.Id = .Id
+                            nAcc.GroupId = .Id
+                            nAcc.Name = .Name
+                            nAcc.Permission = returnPermID(grp2perm)
+                            nAcc.Type = "Groups"
+                            nAcc.Email = Nothing
+                        End With
+                        grpList.Add(nAcc)
+                    End If
+
+tryGroup3:
+                    If grp3NDX = -1 Then GoTo doneLoop
+                    If hasAccess(2) = False Then
+                        Dim nAcc As groupPermsJSON = New groupPermsJSON
+                        With GG(grp3NDX)
+                            nAcc.Id = .Id
+                            nAcc.GroupId = .Id
+                            nAcc.Name = .Name
+                            nAcc.Permission = returnPermID(grp3perm)
+                            nAcc.Type = "Groups"
+                            nAcc.Email = Nothing
+                        End With
+                        grpList.Add(nAcc)
+                    End If
+doneLoop:
+
+                    If grpList.Count Then
+                        Console.Write("Adding " + grpList.Count.ToString + " groups to Project ID " + M.ToString + ": " + T.projOfNDX(M, PP).Name + " - " + T.grandModelAccess(M, grpList).ToString + vbCrLf)
+                    End If
+                Next
+                End
+
             Case "add_users"
                 Dim fileN$ = argValue("file", args)
                 Dim fromFile As Boolean = False
@@ -6744,6 +6946,7 @@ cannotImport:
         Console.WriteLine(fLine("user_libs", "Returns User access to TF Libraries, OPTIONAL --FILE (csv filename), --DEPT (id)"))
         Console.WriteLine(fLine("user_groups", "Returns User access to TF Groups, OPTIONAL --FILE (csv filename), --DEPT (id)"))
         Console.WriteLine(fLine("model_perms", "Returns Threat Model access by Groups and Users, OPTIONAL --FILE (csv filename)"))
+        Console.WriteLine(fLine("add_model_access", "Adds up to 3 groups to a User's models, --METHOD user, either --NAME or --EMAIL for user, --grp1 (group name) --perm1 (RO,RW or AD) - also grp2/3"))
         Console.WriteLine(fLine("add_users", "Adds users from TXT/CSV file, REQUIRED --FILE (csv filename)"))
 
 

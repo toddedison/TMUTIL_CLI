@@ -288,7 +288,24 @@ loopHere:
         Next
         Return False
     End Function
+    Public Function getPermString(permID As Integer) As String
+        getPermString = ""
+        If permID = 2 Then getPermString = "AD"
+        If permID = 1 Then getPermString = "RW"
+        If permID = 0 Then getPermString = "RO"
+    End Function
 
+    Public Function returnPermID(permString As String) As Integer
+        returnPermID = -1
+        Select Case UCase(permString)
+            Case "AD"
+                Return 2
+            Case "RW"
+                Return 1
+            Case "RO"
+                Return 0
+        End Select
+    End Function
 
     Public Function grpNDX(ByRef C As Collection, ByRef a$, Optional ByVal caseSensitive As Boolean = True) As Integer
         Dim K As Long
