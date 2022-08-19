@@ -189,6 +189,15 @@ Public Class TM_Client
         Return O.SelectToken("Data").ToString
     End Function
 
+    Public Function getMatildaDiscover(fileN$) As matildaApp
+        getMatildaDiscover = New matildaApp
+
+        Dim jsoN$ = streamReaderTxt(fileN)
+        If jsoN = "" Then Exit Function
+
+        getMatildaDiscover = JsonConvert.DeserializeObject(Of matildaApp)(jsoN)
+    End Function
+
     Public Function getLibraries() As List(Of tmLibrary)
         getLibraries = New List(Of tmLibrary)
         Dim jsoN$ = getAPIData("/api/libraries")
@@ -2705,8 +2714,128 @@ Public Class tmTemplate
 
 End Class
 
+Public Class matildaApp
+    ' 	"app_id": "7",
+    '"app_name": "MJT",
+    '"app_owner": "Rajesh",
+    '"availability": "Medium",
+    '"business_group": "Sales",
+    '"cloud_provider": "AWS",
+    '"cloud_suitability": "Yes",
+    '"compliance": "SOCX",
+    '"createdDate": "2022-08-15T17:32:59.049+00:00",
+
+    Public [_id] As String
+    Public app_code As String
+    Public app_owner As String
+    Public availability As String
+    Public business_group As String
+    Public cloud_provider As String
+    Public cloud_suitability As String
+    Public compliance As String
+    Public createdDate As String
+    'Public dependency As List(Of matildaDependency)   'dependency is a list inside of a list entitled 'REACTIVEWEB' - ignoring for now
+    Public discovered_name As String
+    Public elasticity As String
+    Public environment As String
+    Public hosts As List(Of matildaHost)
+    Public services As List(Of matildaServiceOuter)
+
+    Public Function getServices(host$) As List(Of matildaService)
+        getServices = New List(Of matildaService)
+        For Each sOut In Me.services
+            For Each S In sOut.services
+                If arrNDX(S.host, host) <> 0 Then
+                    getServices.Add(S)
+                End If
+            Next
+        Next
+    End Function
+End Class
+
+Public Class matildaHost
+    Public host_id As Integer
+    Public ip As String
+    Public name As String
+    Public instance_type As String
+    Public recommended_instance_type As String
+    Public total_memory_gb As Long
+    Public logical_processors As Integer
+    Public total_storage_gb As Long
+    Public operating_system As String
+    Public security As List(Of matildaPorts)
+
+    '    "ip": "52.24.3.106",
+    '			"name": "mongodb2.discovery.com",
+    '			"instance_type": "c6g.large",
+    '			"recommended_instance_type": "c6g.xlarge",
+    '			"total_memory_gb": 3.83,
+    '			"logical_processors": 2,
+    '			"total_storage_gb": 49',
+    '			"operating_sys'tem": "Ubuntu 20.04.3 LTS (Focal Fossa)",'
+    '			"security": [{'
+    '					"tcp": 27017
+    '				},
+    '  "os_recommendation" "Retain OS as is Ubuntu 20.04",
+    '			"migration_strategy": "Replatform",
+    '			"eol_status": "Expiring Soon",
+    '			"eol_date": "04-30-2025",
+    '			"discoveryMap": {
+    '				"ip": "52.24.3.106",
+    '				"host_name": "mongodb2.discovery.com"
+    '			}
+
+    Public os_recommendation As String
+    Public migration_strategy As String
+    Public eol_status As String
+    Public eol_date As String
+    Public discoveryMap As matildaDiscovery
 
 
+End Class
+Public Class matildaPorts
+    Public tcp As Long
+End Class
+Public Class matildaDiscovery
+    Public ip As String
+    Public host_name As String
+End Class
+Public Class matildaServiceOuter
+    Public name As String
+    Public services As List(Of matildaService)
+End Class
+Public Class matildaService
+    '    "name": "tomcat",
+    '				"version": "9.0.16",
+    '				"host": [
+    '					"129.146.23.28"
+    '				],
+    '				"ports": [
+    '					8080
+    '				],
+    '				"path": "/usr/share/tomcat9/etc/server.xml",
+    '				"folders": [
+    '					"/usr/share/tomcat9/webapps"
+    '				],
+    '				"config": "/var/lib/tomcat9",
+    '				"discoveryMap": {
+    '					"name": "tomcat",
+    '					"version": "9.0.16"
+    '				},
+    '				"machineUser": "mdiscover",
+    '				"serviceUser": null,
+    '				"hostName": [
+    '				'	"TomcatWebServer"
+    '				]',
+    '				"id": "62fa834ac485e7009a754921",'
+    '				"recommended_service": "tomcat 9.0.16"
+    '			}]
+    Public name As String
+    Public version As String
+    Public host() As String
+    Public ports() As Long
+    Public recommended_service As String
+End Class
 Public Class tmLabels
     Public Id As Long
     Public Name$

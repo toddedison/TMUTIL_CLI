@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "add_models_groups --method user --email mike.horty@threatmodeler.com --grp1 \"Common Projects\" --perm1 RO"
+      "commandLineArgs": "matildamodel --file matilda.json --modelname jwjw"
     }
   }
 }

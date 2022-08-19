@@ -368,7 +368,7 @@ dontEvalCase:
         Dim K As Long
         arrNDX = 0
         For K = 0 To UBound(A)
-            If Trim(Str(A(K))) = matcH Then
+            If Trim(A(K)) = matcH Then
                 arrNDX = K + 1
                 Exit Function
             End If

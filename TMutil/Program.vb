@@ -338,6 +338,36 @@ doneLoop:
 
                 End
 
+            Case "matildamodel"
+                Dim modelName$ = argValue("modelname", args)
+                If modelName = "" Then
+                    Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
+
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("Matilda JSON file does not exist " + fileN)
+                    End
+                End If
+
+                Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
+
+                Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+
+
+                For Each M In matildaObj.hosts
+                    Dim svcS$ = ""
+                    For Each matSvc In matildaObj.getServices(M.ip)
+                        svcS += matSvc.recommended_service + ","
+                    Next
+                    If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
+                    Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " " + matildaObj.cloud_provider + " " + M.recommended_instance_type + " Recommended OS: " + M.os_recommendation + " Services: " + svcS)
+                Next
+
+                    End
+
+
             Case "csvmodel"
                 Console.WriteLine("CSV Import File must include the following fields, in this order (recommend saving from Excel) : " + vbCrLf + "ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes" + vbCrLf)
                 Dim modelName$ = argValue("modelname", args)
@@ -6939,6 +6969,7 @@ cannotImport:
         Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("appscan", "Code Parse to build Threat Models of source code - abandoned use case"))
+        Console.WriteLine(fLine("matildamodel", "Matilda>KIS JSON translator, --FILE (json filename), --MODELNAME (unique model name)"))
 
 
         Console.WriteLine(vbCrLf + "User Mgmt/RBAC" + vbCrLf + "==============================")
