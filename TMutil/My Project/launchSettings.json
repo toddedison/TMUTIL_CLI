@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "matildamodel --file matilda.json --modelname jwjw"
+      "commandLineArgs": "matildamodel --file matilda.json --modelname matilda123"
     }
   }
 }

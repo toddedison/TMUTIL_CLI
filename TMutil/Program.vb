@@ -274,7 +274,7 @@ skipIt:
                         Next
                     Next
 
-                    If hasaccess(0) = False Then
+                    If hasAccess(0) = False Then
                         Dim nAcc As groupPermsJSON = New groupPermsJSON
                         With GG(grp1NDX)
                             nAcc.Id = .Id
@@ -354,18 +354,104 @@ doneLoop:
                 Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
 
                 Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+                Dim currId As Integer = 1
 
+                Dim R As New tfRequest
+
+                With R
+                    .EntityType = "Components"
+                    .LibraryId = 0
+                    .ShowHidden = False
+                End With
+                T.lib_Comps = T.getTFComponents(R)
+                Console.WriteLine("Loaded comps: " + T.lib_Comps.Count.ToString)
+                Dim compType$ = ""
+
+                Dim newHost As appScan.makeTMJson.tmObject '= New appScan.makeTMJson.tmObject
+
+                Dim compUser As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                With compUser
+                    .ObjectId = currId
+                    .ObjectType = "Component"
+                    '.OutBoundId.Add(2)
+                    .ComponentGuid = T.lib_Comps(T.ndxCompbyName("Users")).Guid.ToString
+                    .ParentGroupId = 0
+                    .Name = "Users"
+                    currId += 1
+                End With
+                jsonObj.Add(compUser)
 
                 For Each M In matildaObj.hosts
+                    compType = ""
+                    Select Case matildaObj.cloud_provider
+                        Case "AWS"
+                            compType = "AWS EC2"
+                        Case "Azure"
+                            compType = "Azure Virtual Machine"
+                    End Select
+
+                    Dim currHostId = 0
+                    If comptype <> "" Then
+                        newHost = New appScan.makeTMJson.tmObject
+                        With newHost
+                            .ObjectId = currId
+                            .ObjectType = "Component"
+                            .Name = M.name
+                            .ComponentGuid = T.lib_Comps(T.ndxCompbyName(compType)).Guid.ToString
+                            .ParentGroupId = 0
+                            currHostId = currId
+                            currId += 1
+                        End With
+                        If currId > 3 Then
+                            'obj 1 will be the first host in the JSON
+                            With jsonObj(1)
+                                '.OutBoundId.Add(currId)
+                            End With
+                        End If
+                    End If
+
                     Dim svcS$ = ""
                     For Each matSvc In matildaObj.getServices(M.ip)
                         svcS += matSvc.recommended_service + ","
                     Next
                     If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
                     Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " " + matildaObj.cloud_provider + " " + M.recommended_instance_type + " Recommended OS: " + M.os_recommendation + " Services: " + svcS)
+
+                    With newHost
+                        .Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
+                    End With
+
+                    If currHostId <> 0 Then jsonObj.Add(newHost)
                 Next
 
+                If jsonObj.Count = 1 Then
+                    'only users exist
+                    Console.WriteLine("ERROR: No objects built - aborting")
                     End
+                End If
+
+                Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+                safeKILL(fileN + ".json")
+                saveJSONtoFile(jsonFile, fileN + ".json")
+                fileN += ".json"
+
+
+                Dim modelNum As Integer
+                Dim result2$ = T.createKISSmodelForImport(modelName)
+                modelNum = Val(result2)
+                If modelNum = 0 Then
+                    Console.WriteLine("Unable to create project - " + result2)
+                    End
+                End If
+                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+                Dim resP$ = T.importKISSmodel(fileN, modelNum)
+                If Mid(resP, 1, 5) = "ERROR" Then
+                    Console.WriteLine("ERROR: Could not create - problem likely due to JSON > Check the Outbound mappings")
+                Else
+                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+                End If
+                End
 
 
             Case "csvmodel"
