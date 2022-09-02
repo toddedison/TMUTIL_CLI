@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "matildamodel --file matilda.json --modelname jwjw"
+      "commandLineArgs": "platform_usage --days 45 --detail true"
     }
   }
 }

@@ -1441,6 +1441,22 @@ nextSR:
 
     End Function
 
+    Public Function getWorkflowEvents(projID As Integer) As List(Of tmWorkflowEvent)
+        Dim jSon$ = ""
+        jSon$ = getAPIData("/api/workflowhistory/" + projID.ToString)
+
+        getWorkflowEvents = JsonConvert.DeserializeObject(Of List(Of tmWorkflowEvent))(jSon)
+
+    End Function
+
+    Public Function getTasks(projID As Integer) As List(Of tmTask)
+        Dim jSon$ = ""
+        jSon$ = getAPIData("/api/project/checklist/" + projID.ToString)
+
+        getTasks = JsonConvert.DeserializeObject(Of List(Of tmTask))(jSon)
+
+    End Function
+
     Public Function getNotesOfThreat(theThreat As tmTThreat, projID As Integer) As List(Of tmNote)
         getNotesOfThreat = New List(Of tmNote)
         Dim jSon$ = ""
@@ -3200,7 +3216,52 @@ Public Class tmNote
     Public CreatedDate As DateTime
     Public Notes As String
 End Class
+Public Class tmTask
+    'Id: 17157
+    'IsCompleted: false
+    'IsDeleted: false
+    'IsExecuteButtonVisible: false
+    'Name: "[@Amir] "
+    'Notes: null
+    'PriorityColor: "#c80e0e"
+    'PriorityId: null
+    'ProjectId: 2687
+    'ProjectName: "webapp08251234"
+    'ResourceTypeValueRelationshipId: null
 
+    Public Id As Long
+    Public IsCompleted As Boolean
+    Public Name As String
+    Public ProjectId As Integer
+    Public ProjectName As String
+    Public ResourceTypeValueRelationshipId? As Integer
+
+
+    Public Function isByUser() As Boolean
+        If IsNothing(Me.ResourceTypeValueRelationshipId) = True Then Return False Else Return True
+    End Function
+End Class
+Public Class tmWorkflowEvent
+    '    "Id": 0,
+    '            "Name": "webapp083022",
+    '            "Version": "2.0",
+    '            "UserId": 0,
+    '            "UserName": "amir.soltanzadeh@threatmodeler.com",
+    '            "ProjectId": 2693,
+    ''            "StatusId": 1,
+    '            "StatusName": "Submit For Approval",
+    '            "Notes": "Version 2.0 is submitted for approval.",
+    '            "DiagramJson": null,
+    '            "DateTime": "2022-09-01T13:14:36.75",
+    Public Id As Integer
+    Public Name As String
+    Public UserName As String
+    Public ProjectId As Integer
+    Public StatusId As Integer
+    Public StatusName As String
+    Public Notes As String
+    Public [DateTime] As DateTime
+End Class
 Public Class controlAffect
     Public ActionByName As String
     Public ActionDate As DateTime

@@ -1013,6 +1013,17 @@ skipSR:
                 Call userGrpReport(argValue("dept", args), argValue("file", args))
                 End
 
+
+            Case "platform_usage"
+                Dim fileN$ = argValue("file", args)
+                Dim numDays As Integer = 3
+                If Len(argValue("days", args)) Then numDays = Val(argValue("days", args))
+                Dim fD As Boolean = False
+                If LCase(argValue("detail", args)) = "true" Then fD = True
+                Call usageReport(fileN, numDays, fD)
+                End
+
+
             Case "get_users"
                 Dim deptId As Integer = 0
                 Dim allDepts As List(Of tmDept) = T.getDepartments
@@ -6535,7 +6546,227 @@ skipDEPT2:
         End If
 
     End Sub
+    Public Sub usageReport(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
+        Dim doCSV As Boolean = False
 
+        If Len(fileN) Then
+            safeKILL(fileN)
+            doCSV = True
+        End If
+
+        Dim allDepts As List(Of tmDept) = T.getDepartments
+        Dim allUsers As List(Of tmUser) = New List(Of tmUser)
+        Dim actualDays As Integer = 0
+        Dim biggestDiagram As Integer = 0 '# of nodes
+        Dim mostDiagrams As Integer = 0 '# of diagrams
+        Dim bigDia$ = ""
+        Dim bigDiaAuthor$ = ""
+        'Dim mostDia$ = ""
+        Dim mostDiaAuthor$ = ""
+        'Dim mostDiaNum As Integer = 0
+        Dim numModelsCreated As Integer = 0
+        Dim numModelsModified As Integer = 0
+        Dim numUsersNoLogin As Integer = 0
+
+        '        Read TM audit logs for specific model actions
+        'Go through Last Logins
+        'Go through all Notes on SRs/Threats
+        '# Models created
+        '# Models modified'''''' from TM audit log
+        '        Workflow activity
+        Dim numLogins As Integer = 0
+
+        Dim dAuthors As Collection = New Collection
+        Dim dNumDiag(1999) As Integer
+
+        'Dim numNotes As Integer = 0     'notes require GET for every threat/sr obj - too $
+        Dim numTasks As Integer = 0
+        Dim numWorkflow As Integer = 0
+        Dim numCompletedTasks As Integer = 0
+        Dim allUsernames As Collection = New Collection
+
+        For Each D In allDepts
+            allUsers = T.getUsers(D.Id)
+            For Each P In allUsers
+                If P.DepartmentId <> D.Id Then GoTo skipUser1
+
+                allUsernames.Add(P.Name)
+
+                Dim LLI$ = ""
+                If IsNothing(P.LastLogin) = False Then
+                    LLI = CDate(P.LastLogin).ToShortDateString
+                End If
+
+                If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+                If numDays >= actualDays Then
+                    'Console.WriteLine(P.Name)
+                    If Len(LLI) > 0 Then numLogins += 1
+                End If
+
+                If LLI = "" Then
+                    LLI = "NEVER"
+                    numUsersNoLogin += 1
+                End If
+
+                If fullDetail = True Then Console.WriteLine("         Last Login: " + P.Name + spaces(40 - Len(P.Name)) + ": " + LLI)
+
+skipUser1:
+            Next
+        Next
+
+
+
+        Console.WriteLine("Activity Report within past " + numDays.ToString + " days:" + vbCrLf)
+        Console.WriteLine("# of User Logins:           " + numLogins.ToString)
+        Console.WriteLine("# of Users with NO Logins:  " + numUsersNoLogin.ToString)
+
+        'Console.WriteLine("# of Models Created:        " + numModelsCreated.ToString)
+
+        Dim PP As List(Of tmProjInfo)
+        PP = T.getAllProjects()
+
+        Dim theModel As tmModel = New tmModel
+
+        For Each P In PP
+
+            Dim LLI$ = ""
+            LLI = "" : actualDays = 0
+
+            If IsNothing(P.CreateDate) = False Then
+                LLI = CDate(P.CreateDate).ToShortDateString
+            End If
+
+            If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+            Dim withinScope As Boolean = False
+
+            If numDays >= actualDays Then
+                'Console.WriteLine(P.Name)
+                numModelsCreated += 1
+                If grpNDX(dAuthors, P.CreatedByName) = 0 Then
+                    dAuthors.Add(P.CreatedByName)
+                End If
+                dNumDiag(grpNDX(dAuthors, P.CreatedByName) - 1) += 1
+                withinScope = True
+            End If
+
+            LLI = "" : actualDays = 0
+            If IsNothing(P.LastModifiedDate) = False Then
+                LLI = CDate(P.LastModifiedDate).ToShortDateString
+            End If
+
+            If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+            If numDays >= actualDays Then
+                'Console.WriteLine(P.Name)
+                numModelsModified += 1
+                withinScope = True
+            End If
+
+            If withinScope = False Then
+                GoTo notThisModel
+            End If
+
+
+            If fullDetail = False Then Console.WriteLine("Reading Model: " + P.Name)
+
+            theModel = T.getProject(P.Id)
+            With theModel
+                If fullDetail Then Console.WriteLine("         Model Name: " + P.Name + " Author: " + P.CreatedByName + " # Components: " + .Nodes.Count.ToString)
+                If .Nodes.Count > biggestDiagram Then
+                    biggestDiagram = .Nodes.Count
+                    bigDia = P.Name
+                    bigDiaAuthor = P.CreatedByName
+                End If
+
+            End With
+
+            Dim wfEvents As List(Of tmWorkflowEvent)
+            wfEvents = T.getWorkflowEvents(P.Id)
+
+            For Each wF In wfEvents
+                LLI = "" : actualDays = 0
+                If IsNothing(wF.DateTime) = False Then
+                    LLI = CDate(wF.DateTime).ToShortDateString
+                End If
+
+                If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+                If numDays >= actualDays Then
+                    'Console.WriteLine(P.Name)
+                    numWorkflow += 1
+                End If
+            Next
+
+            If fullDetail = True Then
+                For Each wF In wfEvents
+                    Console.WriteLine("         " + wF.Notes + " by " + wF.UserName)
+                Next
+            End If
+
+            GoTo skipTasks ' tasks have to be inspected individually for relevant details
+
+            Dim projTasks As List(Of tmTask)
+            projTasks = T.getTasks(P.Id)
+
+            For Each pT In projTasks
+                If pT.isByUser = True Then
+                    numTasks += 1
+                    If fullDetail = True Then Console.WriteLine("          Create Task: " + pT.Name)
+                Else
+                    If pT.IsCompleted = True Then
+                        numCompletedTasks += 1
+                        If fullDetail = True Then Console.WriteLine("          Complete Task: " + pT.Name)
+                    End If
+                End If
+            Next
+
+skipTasks:
+
+            If fullDetail = False Then
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+                Console.WriteLine(spaces(80))
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+            End If
+
+notThisModel:
+        Next
+
+        Console.WriteLine("# of Users:                 " + allUsernames.Count.ToString)
+        Console.WriteLine("# of Models Created:        " + numModelsCreated.ToString)
+        Console.WriteLine("# of Models Modified:       " + numModelsModified.ToString)
+        Console.WriteLine("Largest Diagram (# Comps):  " + biggestDiagram.ToString)
+        Console.WriteLine("Largest Diagram (Author):   " + bigDia + " by " + bigDiaAuthor)
+        Console.WriteLine("# Workflow Events:          " + numWorkflow.ToString)
+        'Console.WriteLine("# Tasks Created:            " + numTasks.ToString)
+        'Console.WriteLine("# Tasks Completed:          " + numCompletedTasks.ToString)
+
+        Dim K As Integer = 0
+
+        For K = 1 To dAuthors.Count
+            If dNumDiag(K - 1) > mostDiagrams Then
+                mostDiagrams = dNumDiag(K - 1)
+                mostDiaAuthor = dAuthors(K)
+            End If
+            If fullDetail Then
+                Console.WriteLine("         # Models: " + dAuthors(K) + spaces(40 - Len(dAuthors(K))) + dNumDiag(K - 1).ToString)
+            End If
+        Next
+
+        Dim numNoModels As Integer = 0
+
+        For K = 1 To allUsernames.Count
+            If grpNDX(dAuthors, allUsernames(K)) = 0 Then
+                numNoModels += 1
+                If fullDetail = True Then Console.WriteLine("        NO Models: " + allUsernames(K))
+            End If
+        Next
+
+        Console.WriteLine("Most Created:               " + mostDiaAuthor + " created " + mostDiagrams.ToString + " models")
+        Console.WriteLine("# Users with No Models:     " + numNoModels.ToString)
+
+
+    End Sub
     Public Sub userGrpReport(deptArgs$, fileArgs$)
         Dim deptId As Integer = 0
         If Len(deptArgs) Then deptId = Val(deptArgs)
@@ -6986,10 +7217,11 @@ cannotImport:
         Console.WriteLine(fLine("get_groups", "Returns Groups"))
         Console.WriteLine(fLine("compliance_csv", "Returns Compliance Framework/SR mapping, arg: --FILE, OPT: --SUMMARY true"))
         Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
+        Console.WriteLine(fLine("platform_usage", "Returns statistics according to Usage"))
 
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
-        Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
+        'Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
         Console.WriteLine(fLine("template_convert", "text"))
 
         Console.WriteLine(vbCrLf + "Local TF Info" + vbCrLf + "==============================")
