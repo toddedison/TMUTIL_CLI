@@ -345,112 +345,16 @@ doneLoop:
                     End
                 End If
 
+                Dim inspectOnly As Boolean = False
+                If LCase(argValue("inspectonly", args)) = "true" Then inspectOnly = True
+
                 Dim fileN$ = argValue("file", args)
                 If Dir(fileN) = "" Then
                     Console.WriteLine("Matilda JSON file does not exist " + fileN)
                     End
                 End If
 
-                Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
-
-                Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
-                Dim currId As Integer = 1
-
-                Dim R As New tfRequest
-
-                With R
-                    .EntityType = "Components"
-                    .LibraryId = 0
-                    .ShowHidden = False
-                End With
-                T.lib_Comps = T.getTFComponents(R)
-                Console.WriteLine("Loaded comps: " + T.lib_Comps.Count.ToString)
-                Dim compType$ = ""
-
-                Dim newHost As appScan.makeTMJson.tmObject '= New appScan.makeTMJson.tmObject
-
-                Dim compUser As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
-                With compUser
-                    .ObjectId = currId
-                    .ObjectType = "Component"
-                    '.OutBoundId.Add(2)
-                    .ComponentGuid = T.lib_Comps(T.ndxCompbyName("Users")).Guid.ToString
-                    .ParentGroupId = 0
-                    .Name = "Users"
-                    currId += 1
-                End With
-                jsonObj.Add(compUser)
-
-                For Each M In matildaObj.hosts
-                    compType = ""
-                    Select Case matildaObj.cloud_provider
-                        Case "AWS"
-                            compType = "AWS EC2"
-                        Case "Azure"
-                            compType = "Azure Virtual Machine"
-                    End Select
-
-                    Dim currHostId = 0
-                    If comptype <> "" Then
-                        newHost = New appScan.makeTMJson.tmObject
-                        With newHost
-                            .ObjectId = currId
-                            .ObjectType = "Component"
-                            .Name = M.name
-                            .ComponentGuid = T.lib_Comps(T.ndxCompbyName(compType)).Guid.ToString
-                            .ParentGroupId = 0
-                            currHostId = currId
-                            currId += 1
-                        End With
-                        If currId > 3 Then
-                            'obj 1 will be the first host in the JSON
-                            With jsonObj(1)
-                                '.OutBoundId.Add(currId)
-                            End With
-                        End If
-                    End If
-
-                    Dim svcS$ = ""
-                    For Each matSvc In matildaObj.getServices(M.ip)
-                        svcS += matSvc.recommended_service + ","
-                    Next
-                    If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
-                    Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " " + matildaObj.cloud_provider + " " + M.recommended_instance_type + " Recommended OS: " + M.os_recommendation + " Services: " + svcS)
-
-                    With newHost
-                        .Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
-                    End With
-
-                    If currHostId <> 0 Then jsonObj.Add(newHost)
-                Next
-
-                If jsonObj.Count = 1 Then
-                    'only users exist
-                    Console.WriteLine("ERROR: No objects built - aborting")
-                    End
-                End If
-
-                Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
-                safeKILL(fileN + ".json")
-                saveJSONtoFile(jsonFile, fileN + ".json")
-                fileN += ".json"
-
-
-                Dim modelNum As Integer
-                Dim result2$ = T.createKISSmodelForImport(modelName)
-                modelNum = Val(result2)
-                If modelNum = 0 Then
-                    Console.WriteLine("Unable to create project - " + result2)
-                    End
-                End If
-                Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
-
-                Dim resP$ = T.importKISSmodel(fileN, modelNum)
-                If Mid(resP, 1, 5) = "ERROR" Then
-                    Console.WriteLine("ERROR: Could not create - problem likely due to JSON > Check the Outbound mappings")
-                Else
-                    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
-                End If
+                Call createMatildaModel(fileN, modelName, inspectOnly)
                 End
 
 
@@ -6632,6 +6536,240 @@ skipDEPT2:
         End If
 
     End Sub
+
+    Private Function matildaHostToRec(recommendedService$) As String
+        Select Case recommendedService
+            Case "Azure Kubernetes Service (AKS)"
+                Return "Azure Kubernetes Service"
+            Case "Azure CosmoDB(with MongoDB compatibility)"
+                Return "Azure Cosmos DB"
+        End Select
+        Return ""
+    End Function
+
+    Public Sub createMatildaModel(fileN$, modelName$, Optional ByVal inspectOnly As Boolean = False)
+        Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
+
+        Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+        Dim currId As Integer = 1
+
+        Dim R As New tfRequest
+
+        With R
+            .EntityType = "Components"
+            .LibraryId = 0
+            .ShowHidden = False
+        End With
+        T.lib_Comps = T.getTFComponents(R)
+        Console.WriteLine("Loaded comps: " + T.lib_Comps.Count.ToString)
+        Dim compType$ = ""
+
+        Dim newHost As appScan.makeTMJson.tmObject '= New appScan.makeTMJson.tmObject
+
+        Dim infraLayer As Boolean = False
+        Dim serverLayer As Boolean = False
+        Dim databaseLayer As Boolean = False
+
+        Dim compUser As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+        With compUser
+            .ObjectId = currId
+            .ObjectType = "Component"
+            '.OutBoundId.Add(2)
+            .ComponentGuid = T.lib_Comps(T.ndxCompbyName("Users")).Guid.ToString
+            .ParentGroupId = 0
+            .Name = "Users"
+            currId += 1
+        End With
+        jsonObj.Add(compUser)
+        Dim numLayers As Integer = 0
+        Dim sLayerNDX As Integer = 0
+        Dim iLayerNDX As Integer = 0
+        Dim dLayerNDX As Integer = 0
+
+        For Each M In matildaObj.hosts
+            compType = ""
+            Select Case matildaObj.cloud_provider
+                Case "AWS"
+                    compType = "AWS EC2"
+                Case "Azure"
+                    compType = "Azure Virtual Machines"
+            End Select
+
+            If M.serverType = "Web Server" = True And serverLayer = False Then
+                If iLayerNDX = 0 Then
+                    serverLayer = True
+
+                    Dim sLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                numLayers += 1
+                With sLayer
+                    .ParentGroupId = 0
+                    .ObjectId = currId
+                    currId += 1
+                    sLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Server Role"
+                End With
+                jsonObj.Add(sLayer)
+            End If
+            End If
+
+            If M.serverType = "Infra" = True And infraLayer = False Then
+                If iLayerNDX = 0 Then
+                    numLayers += 1
+                    infraLayer = True
+                    Dim iLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    numLayers += 1
+                    With iLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        iLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Infra Role"
+                    End With
+                    jsonObj.Add(iLayer)
+                End If
+            End If
+
+
+            If M.serverType = "Database" = True And databaseLayer = False Then
+                If dLayerNDX = 0 Then
+                    numLayers += 1
+                    databaseLayer = True
+                    Dim dLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    numLayers += 1
+                    With dLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        dLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Database Role"
+                    End With
+                    jsonObj.Add(dLayer)
+                End If
+            End If
+
+            newHost = New appScan.makeTMJson.tmObject
+
+            Dim currHostId = 0
+            If compType <> "" Then
+                newHost = New appScan.makeTMJson.tmObject
+                With newHost
+                    .ObjectId = currId
+                    .ObjectType = "Component"
+                    .Name = M.name
+                    .ComponentGuid = T.lib_Comps(T.ndxCompbyName(compType)).Guid.ToString
+                    .ParentGroupId = 0
+                    currHostId = currId
+                    currId += 1
+                End With
+                If currId > 3 Then
+                    'obj 1 will be the first host in the JSON
+                    With jsonObj(1)
+                        '.OutBoundId.Add(currId)
+                    End With
+                End If
+            Else
+                Console.WriteLine("Unable to find HOST: " + M.name)
+            End If
+
+            Dim svcS$ = ""
+            Dim listenPorts$ = ""
+
+
+            For Each matSvc In matildaObj.getServices(M.ip)
+                svcS += matSvc.recommended_service + ","
+
+                Dim mapToComponent$ = matildaHostToRec(matSvc.recommended_service)
+                If Len(mapToComponent) Then
+                    newHost.ComponentGuid = T.lib_Comps(T.ndxCompbyName(mapToComponent)).Guid.ToString
+
+                End If
+
+                For Each porT In matSvc.ports
+                    listenPorts += porT.ToString + ","
+                Next
+            Next
+
+
+            If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
+            If Len(listenPorts) Then listenPorts = "Listening: " + Mid(listenPorts, 1, Len(listenPorts) - 1)
+            Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " Type: " + M.serverType + " Running " + M.operating_system + " " + listenPorts + vbCrLf + matildaObj.cloud_provider + " Instance Type: " + M.recommended_instance_type + vbCrLf + " Recommended OS: " + M.os_recommendation + vbCrLf + " Services: " + svcS + vbCrLf)
+
+            With newHost
+                .Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
+            End With
+
+            Select Case M.serverType
+
+                Case "Web Server"
+                    newHost.ParentGroupId = sLayerNDX
+                Case "Infra"
+                    newHost.ParentGroupId = iLayerNDX
+                Case "Database"
+                    newHost.ParentGroupId = dLayerNDX
+            End Select
+
+            If currHostId <> 0 Then jsonObj.Add(newHost)
+        Next
+
+        With jsonObj(0)
+            'this is Users
+            .OutBoundId.Add(sLayerNDX)
+        End With
+
+        With jsonObj(sLayerNDX)
+            If dLayerNDX Then
+                .OutBoundId.Add(dLayerNDX)
+                If iLayerNDX Then
+                    .OutBoundId.Add(iLayerNDX)
+                End If
+            End If
+        End With
+
+        If jsonObj.Count = 1 Then
+            'only users exist
+            Console.WriteLine("ERROR: No objects built - aborting")
+            End
+        End If
+
+        Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+        safeKILL(fileN + ".json")
+        saveJSONtoFile(jsonFile, fileN + ".json")
+        fileN += ".json"
+        Console.WriteLine("Created " + fileN)
+
+        If inspectOnly = True Then
+            Console.WriteLine("# Objects: " + jsonObj.Count.ToString)
+            For Each J In jsonObj
+                Console.WriteLine("To create: " + J.Name)
+            Next
+            Exit Sub
+        End If
+
+        Dim modelNum As Integer
+        Dim result2$ = T.createKISSmodelForImport(modelName)
+        modelNum = Val(result2)
+        If modelNum = 0 Then
+            Console.WriteLine("Unable to create project - " + result2)
+            End
+        End If
+        Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+        Dim resP$ = T.importKISSmodel(fileN, modelNum)
+        If Mid(resP, 1, 5) = "ERROR" Then
+            Console.WriteLine("ERROR: Could not create - problem likely due to JSON > Check the Outbound mappings")
+        Else
+            Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+        End If
+        End
+
+    End Sub
+
     Public Sub usageReport(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
         Dim doCSV As Boolean = False
 
@@ -6640,7 +6778,8 @@ skipDEPT2:
             doCSV = True
         End If
 
-        Dim allDepts As List(Of tmDept) = T.getDepartments
+        Dim allDepts As List(Of tmDept) = New List(Of tmDept)
+        allDepts = T.getDepartments()
         Dim allUsers As List(Of tmUser) = New List(Of tmUser)
         Dim actualDays As Integer = 0
         Dim biggestDiagram As Integer = 0 '# of nodes
@@ -7286,7 +7425,7 @@ cannotImport:
         Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("appscan", "Code Parse to build Threat Models of source code - abandoned use case"))
-        Console.WriteLine(fLine("matildamodel", "Matilda>KIS JSON translator, --FILE (json filename), --MODELNAME (unique model name)"))
+        Console.WriteLine(fLine("matildamodel", "Matilda>KIS JSON translator, --FILE (json filename), --MODELNAME (unique model name), --INSPECTONLY true"))
 
 
         Console.WriteLine(vbCrLf + "User Mgmt/RBAC" + vbCrLf + "==============================")

@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "platform_usage --days 45 --detail true"
+      "commandLineArgs": "platform_usage --days 365"
     }
   }
 }

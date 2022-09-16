@@ -2777,6 +2777,7 @@ Public Class matildaHost
     Public recommended_instance_type As String
     Public total_memory_gb As Long
     Public logical_processors As Integer
+    Public serverType As String
     Public total_storage_gb As Long
     Public operating_system As String
     Public security As List(Of matildaPorts)
