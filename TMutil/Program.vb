@@ -413,6 +413,22 @@ doneLoop:
                 End If
                 End
 
+                case "lucidcsv"
+                Dim modelName$ = argValue("modelname", args)
+                If modelName = "" Then
+                    Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
+
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                    End
+                End If
+                Call convertLucidToCSV(fileN, modelName)
+                End
+
+
             Case "submitkis"
                 Dim modelName$ = argValue("modelname", args)
                 If modelName = "" Then
@@ -6537,13 +6553,71 @@ skipDEPT2:
 
     End Sub
 
+    Private Sub convertLucidToCSV(fileN$, modelName$)
+
+        Dim R As New tfRequest
+
+        With R
+            .EntityType = "Components"
+            .LibraryId = 0
+            .ShowHidden = False
+        End With
+        T.lib_Comps = T.getTFComponents(R)
+        Console.WriteLine("Loaded comps: " + T.lib_Comps.Count.ToString)
+
+        Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+        jsonObj = lucid2JSON(fileN)
+
+        If jsonObj.Count = 0 Then
+            Console.WriteLine("ERROR: No objects built from CSV - Aborting")
+            End
+        End If
+
+        Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+        safeKILL(fileN + ".json")
+        saveJSONtoFile(jsonFile, fileN + ".json")
+        fileN += ".json"
+
+
+        Dim modelNum As Integer
+        Dim result2$ = T.createKISSmodelForImport(modelName)
+        modelNum = Val(result2)
+        If modelNum = 0 Then
+            Console.WriteLine("Unable to create project - " + result2)
+            End
+        End If
+        Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+        Dim resP$ = T.importKISSmodel(fileN, modelNum)
+        If Mid(resP, 1, 5) = "ERROR" Then
+            Console.WriteLine(resP)
+        Else
+            Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+        End If
+
+    End Sub
+
     Private Function matildaHostToRec(recommendedService$) As String
+        matildaHostToRec = ""
         Select Case recommendedService
             Case "Azure Kubernetes Service (AKS)"
                 Return "Azure Kubernetes Service"
             Case "Azure CosmoDB(with MongoDB compatibility)"
                 Return "Azure Cosmos DB"
         End Select
+
+        ' if here, not a strict string search
+        ' eg 
+        '   ],
+        '    "id": "63068fb6274f8f9da4bdd8af",
+        '    "recommended_service": "Azure Database SQL  server 19"
+        '  }
+        ']
+
+        If InStr(recommendedService, "Azure Database SQL") Then
+            Return "Azure SQL Database"
+        End If
+
         Return ""
     End Function
 
@@ -6687,7 +6761,8 @@ skipDEPT2:
                 Dim mapToComponent$ = matildaHostToRec(matSvc.recommended_service)
                 If Len(mapToComponent) Then
                     newHost.ComponentGuid = T.lib_Comps(T.ndxCompbyName(mapToComponent)).Guid.ToString
-
+                Else
+                    Console.WriteLine("Not mapping directly to: " + matSvc.recommended_service)
                 End If
 
                 For Each porT In matSvc.ports
@@ -6698,10 +6773,10 @@ skipDEPT2:
 
             If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
             If Len(listenPorts) Then listenPorts = "Listening: " + Mid(listenPorts, 1, Len(listenPorts) - 1)
-            Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " Type: " + M.serverType + " Running " + M.operating_system + " " + listenPorts + vbCrLf + matildaObj.cloud_provider + " Instance Type: " + M.recommended_instance_type + vbCrLf + " Recommended OS: " + M.os_recommendation + vbCrLf + " Services: " + svcS + vbCrLf)
+            'Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " Type: " + M.serverType + " Running " + M.operating_system + " " + listenPorts + vbCrLf + matildaObj.cloud_provider + " Instance Type: " + M.recommended_instance_type + vbCrLf + " Recommended OS: " + M.os_recommendation + vbCrLf + " Services: " + svcS + vbCrLf)
 
             With newHost
-                .Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
+                '.Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
             End With
 
             Select Case M.serverType
@@ -6713,6 +6788,10 @@ skipDEPT2:
                 Case "Database"
                     newHost.ParentGroupId = dLayerNDX
             End Select
+
+            If newHost.ParentGroupId = 0 Then
+                Console.WriteLine("Using 0 for ServerType: " + M.serverType)
+            End If
 
             If currHostId <> 0 Then jsonObj.Add(newHost)
         Next
@@ -6749,6 +6828,8 @@ skipDEPT2:
                 Console.WriteLine("To create: " + J.Name)
             Next
             Exit Sub
+        Else
+            Console.WriteLine("Model contains " + jsonObj.Count.ToString + " components")
         End If
 
         Dim modelNum As Integer
@@ -7241,6 +7322,181 @@ skipDept2:
         End With
 
         addTF_Attr = True
+    End Function
+
+    Private Function lucidObjType(lucid$) As String
+        Select Case LCase(lucid$)
+'            ,Rectangle,Geometric Shapes,2,,,,,,,,Data Acquisition,
+'4,AWS Secrets Manager,AWS Architecture 2019,2,,,,,,,,AWS Secrets Manager,
+'5,Amazon EC2,AWS Architecture 2017,2,,,,,,,,Config/ Scheduling,
+'6,Amazon API Gateway,AWS Architecture 2019,2,,,,,,,,API,
+'7,Amazon DynamoDB,AWS Architecture 2019,2,,,,,,,,Config DB,
+'8,S3 bucket,AWS Architecture 2017,2,,,,,,,,Original Files,
+'9,AWS Lambda,AWS Architecture 2019,2,,,,,,,,File Arrival,
+'10,Amazon SNS,AWS Architecture 2017,2,,,,,,,,SNS,
+'11,S3 bucket,AWS Architecture 2017,2,,,,,,,,Raw Files,
+'12,Rectangle,Geometric Shapes,2,,18,,,,,,Portfolio Data Extraction,
+'13,Amazon SQS,AWS Architecture 2017,2,,18,,,,,,SQS,
+'1
+               ' 4,Amazon SNS,AWS Ar
+            Case "aws secrets manager"
+                Return "AWS Secrets Manager"
+            Case "amazon ec2"
+                Return "AWS EC2"
+            Case "amazon api gateway"
+                Return "AWS API Gateway"
+            Case "amazon dynamodb"
+                Return "AWS DynamoDB"
+            Case "aws lambda"
+                Return "AWS Lambda"
+            Case "amazon sns"
+                Return "AWS SNS"
+            Case "s3 bucket"
+                Return "AWS S3 Bucket"
+            Case "amazon sqs"
+                Return "AWS SQS"
+        End Select
+        Return ""
+    End Function
+
+    Private Function getJsonObjNDX(iD As Integer, jObj As List(Of appScan.makeTMJson.tmObject)) As Integer
+        getJsonObjNDX = -1
+
+        For Each J In jObj
+            getJsonObjNDX += 1
+
+            If J.ObjectId = iD Then
+                Return getJsonObjNDX
+            End If
+        Next
+    End Function
+
+
+    Private Function lucid2JSON(csvFile$) As List(Of appScan.makeTMJson.tmObject)
+        lucid2JSON = New List(Of appScan.makeTMJson.tmObject)
+        'Id,Name,Shape Library,Page ID,Contained By,Group,Line Source,Line Destination,Source Arrow,Destination Arrow,Status,Text Area 1,Comments
+
+        Dim myJsonObjects As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+
+        If Dir(csvFile) = "" Then Exit Function
+
+        Dim linesOfCSV As New Collection
+        linesOfCSV = CSVFiletoCOLL(csvFile)
+
+        ' first pass - find all components
+        ' second pass - find all "Line" "Arrow", these become paths
+        ' third pass - find all groups
+
+        Dim itemsPlaced As Collection = New Collection 'here store IDs of objects actually placed
+        Dim nextObjId As Integer = 0
+        For Each C In linesOfCSV
+            If InStr(C, "Id,Name,") <> 0 Then GoTo skipHeader
+
+            Dim findCompNdx As Integer = -1
+            Dim lName$ = csvObject(C, 1)
+            Dim lType$ = lucidObjType(lName)
+
+            If Len(lType) Then findCompNdx = T.ndxCompbyName(lType)
+
+            If findCompNdx = -1 Or lType = "" Then
+                Console.WriteLine("Cannot find object '" + csvObject(C, 1) + "' - skipping")
+                GoTo skipHeader
+            End If
+
+            Dim newJS As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+            With newJS
+                .Name = csvObject(C, 11)
+                .ComponentGuid = T.lib_Comps(findCompNdx).Guid.ToString
+                .ObjectId = Val(csvObject(C, 0))
+                .ObjectType = "Component"
+                .ParentGroupId = Val(csvObject(C, 5))
+                .Notes = csvObject(C, 12)
+            End With
+            nextObjId = newJS.ObjectId + 10
+            itemsPlaced.Add(newJS.ObjectId)
+            myJsonObjects.Add(newJS)
+skipHeader:
+        Next
+
+        ' finding paths
+        For Each C In linesOfCSV
+            If csvObject(C, 1) = "Line" And csvObject(C, 9) = "Arrow" Then
+                Dim jNDXsource As Integer = getJsonObjNDX(Val(csvObject(C, 6)), myJsonObjects)
+                Dim jNDXdest As Integer = getJsonObjNDX(Val(csvObject(C, 7)), myJsonObjects)
+                If jNDXsource = -1 Or jNDXdest = -1 Then GoTo skipPathAnalysis
+
+                Dim outprot$ = csvObject(C, 12)
+                With myJsonObjects(jNDXsource)
+                    .OutBoundId.Add(myJsonObjects(jNDXdest).ObjectId)
+
+                    If Len(outprot) Then
+                        Dim protID As Integer
+                        protID = T.ndxCompbyName(outprot, "Protocols")
+                        If protID = -1 Or outprot = "" Then
+                            .OutBoundGuids.Add("")
+                        Else
+                            .OutBoundGuids.Add(T.lib_Comps(protID).Guid.ToString)
+                        End If
+                    End If
+
+                End With
+            End If
+skipPathAnalysis:
+        Next
+
+
+        'finding groups
+        ' if shape of group exists, assume C,12 is name of group 
+        Dim groupsFound As Collection = New Collection
+        Dim groupObjIds As Collection = New Collection
+
+        For Each C In linesOfCSV
+            If InStr(C, "Id,Name,") <> 0 Then GoTo skipHeader2
+
+            Dim group$ = ""
+            group = csvObject(C, 5)
+            If Len(group) Then
+                If grpNDX(groupsFound, group) = 0 Then
+                    ' this is a new group
+                    groupsFound.Add(group) ' this is ID of group as described by object(s)
+                    groupObjIds.Add(nextObjId) ' this is actual ObjectID of Group Container
+
+                    ' until fixed/researched, group must be existing GUID
+                    Dim newGroupContainer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    With newGroupContainer
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "."
+                        .ObjectId = nextObjId
+                        .ParentGroupId = 0 ' this will not work for multiple layers of groups/ would likely need to inspect 'Group 1' object ID
+                    End With
+                    myJsonObjects.Add(newGroupContainer)
+                    nextObjId += 1
+                End If
+                If csvObject(C, 2) = "Geometric Shapes" And Len(csvObject(C, 5)) > 0 Then
+                    Dim nameOfGroup$ = csvObject(C, 11)
+                    If Len(nameOfGroup) Then
+                        Dim gNDX As Integer = grpNDX(groupsFound, csvObject(C, 5))
+                        If gNDX Then
+                            myJsonObjects(getJsonObjNDX(groupObjIds(gNDX), myJsonObjects)).Name = nameOfGroup
+                        End If
+                    End If
+                End If
+                End If
+skipHeader2:
+        Next
+
+        'finally, assigning grouped objects to their group objID
+        For Each J In myJsonObjects
+            If J.ParentGroupId <> 0 Then
+                Dim gNDX As Integer = grpNDX(groupsFound, J.ParentGroupId)
+                J.ParentGroupId = groupObjIds(gNDX)
+            End If
+        Next
+
+        Return myJsonObjects
+
+
     End Function
 
     Private Function csv2JSON(csvFile$) As List(Of appScan.makeTMJson.tmObject)
