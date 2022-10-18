@@ -413,7 +413,17 @@ doneLoop:
                 End If
                 End
 
-                case "lucidcsv"
+            Case "importtxt"
+                Dim fileN$ = argValue("file", args)
+                If Dir(fileN) = "" Then
+                    Console.WriteLine("file does not exist " + fileN)
+                    End
+                End If
+                Call textConvert(fileN)
+                End
+
+
+            Case "lucidcsv"
                 Dim modelName$ = argValue("modelname", args)
                 If modelName = "" Then
                     Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
@@ -754,6 +764,22 @@ doneHere:
                 If LCase(argValue("issystem", args)) = "true" Then isS = True Else isS = False
                 LL = T.getLabels(isS)
 
+                Dim doCSV As Boolean
+                Dim fileN$ = argValue("file", args)
+                Dim FF As Integer
+
+                If Len(fileN) Then
+                    doCSV = True
+                    safeKILL(fileN)
+                    FF = FreeFile()
+                    Console.WriteLine("Writing to CSV File: " + fileN)
+                    FileOpen(FF, fileN, OpenMode.Output)
+                    Print(FF, "Name,Label" + vbCrLf)
+                End If
+
+                Dim qq$ = Chr(34)
+
+
                 Dim srchS$ = argValue("search", args)
                 If Len(srchS) Then srchS = LCase(srchS)
 
@@ -767,10 +793,12 @@ doneHere:
                     Dim a$ = "System:"
                     If L.IsSystem = True Then a += "True" Else a += "False"
                     Console.WriteLine(fLine("Id:" + L.Id.ToString + " " + a, L.Name))
+                    If doCSV Then Print(FF, L.Id.ToString + "," + qq + L.Name + qq + vbCrLf)
 skipMeLabel:
 
                 Next
 
+                If doCSV Then FileClose(FF)
                 Console.WriteLine("# of Items: " + numItems.ToString)
                 End
 
@@ -836,7 +864,7 @@ showTH:
                         Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.Name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
 
                         If doCSV Then
-                            Print(FF, qq + lName + qq + "," + qq + P.Name + qq + "," + P.Id.ToString + "," + qq + P.RiskName + qq + "," + qq + P.Labels + qq)
+                            Print(FF, qq + lName + qq + "," + qq + P.Name + qq + "," + P.Id.ToString + "," + qq + P.RiskName + qq + "," + qq + P.Labels + qq + vbCrLf)
                         End If
                         numItems += 1
 skipTH:
@@ -6553,6 +6581,20 @@ skipDEPT2:
 
     End Sub
 
+    Private Sub textConvert(fileN$)
+        Dim FF As Integer
+        FF = FreeFile()
+        Dim a$ = ""
+
+        FileOpen(FF, fileN, OpenMode.Input)
+        Do Until EOF(FF) = True
+            a$ = LineInput(FF)
+            Console.WriteLine("Case " + Chr(34) + LCase(a) + Chr(34) + vbCrLf + "return " + Chr(34) + Chr(34))
+        Loop
+
+        FileClose(FF)
+    End Sub
+
     Private Sub convertLucidToCSV(fileN$, modelName$)
 
         Dim R As New tfRequest
@@ -7355,7 +7397,124 @@ skipDept2:
                 Return "AWS S3 Bucket"
             Case "amazon sqs"
                 Return "AWS SQS"
+            Case "amazon ec2 image builder"
+                return "EC2 Image Builder"
+
+
+
+
+            Case "amazon elastic container kubernetes"
+                Return "AWS EKS"
+            Case "amazon elastic container registry"
+                Return "AWS ECR"
+            Case "amazon elastic container service"
+                Return "AWS ECS"
+            Case "amazon genomics cli"
+                Return ""
+            Case "amazon lightsail"
+                Return "AWS Lightsail"
+            Case "aws app runner"
+                Return ""
+            Case "aws batch"
+                Return "AWS Batch"
+            Case "aws compute optimizer"
+                Return "AWS Compute Optimizer"
+            Case "aws elastic beanstalk"
+                Return "AWS Elastic Beanstalk"
+            Case "aws fargate"
+                Return "AWS ECS"
+            Case "aws lambda"
+                Return "AWS Lambda"
+            Case "aws local zones"
+                Return ""
+            Case "aws nitro enclaves"
+                Return ""
+            Case "aws outposts family"
+                Return "AWS Outposts"
+            Case "aws outposts rack"
+                Return ""
+            Case "vmware cloud on aws"
+                Return ""
+            Case "nice enginframe"
+                Return ""
+            Case "nice dcv"
+                Return ""
+            Case "elastic fabric adapter"
+                Return ""
+            Case "ec2 auto scaling"
+                Return "AWS Auto Scaling Group"
+            Case "bottlerocket"
+                Return ""
+            Case "aws wavelength"
+                Return ""
+            Case "aws thinkbox xmesh"
+                Return ""
+            Case "aws thinkbox stoke"
+                Return ""
+            Case "aws thinkbox sequoia"
+                Return ""
+            Case "aws thinkbox krakatoa"
+                Return ""
+            Case "aws serverless application repository"
+                Return "AWS Serverless Application Repository"
+            Case "aws parallelcluster"
+                Return ""
+            Case "aws outposts servers"
+                Return "AWS Outposts"
+            Case "aws outposts family"
+                Return ""
+            Case "ec2 db instance"
+                Return ""
+            Case "ec2 elastic ip address"
+                Return "AWS Elastic IP"
+            Case "ec2 ami"
+                Return "AWS AMI"
+            Case "ec2 dl1 instance"
+                Return ""
+            Case "ec2 c6gd instance"
+                Return ""
+            Case "ec2 instance with cloudwatch"
+                Return "AWS CloudWatch"
+            Case "elastic beanstalk application"
+                Return "AWS Elastic Beanstalk"
+            Case "lambda lambda function"
+                Return ""
+            Case "containers"
+                Return ""
+            Case "amazon eks anywhere"
+                Return "AWS EKS"
+            Case "amazon ecs anywhere"
+                Return "AWS ECS"
+            Case "amazon eks cloud"
+                Return ""
+            Case "amazon eks distro"
+                Return ""
+            Case "amazon elastic container registry"
+                Return ""
+            Case "red hat openshift"
+                Return ""
+            Case "database"
+                Return ""
+            Case "amazon aurora"
+                Return "AWS Aurora"
+            Case "amazon document db"
+                Return ""
+            Case "amazon dynamodb"
+                Return "Amazon DocumentDB"
+            Case "amazon elasticache"
+                Return "AWS ElastiCache"
+            Case "amazon keyspaces"
+                Return ""
+            Case "amazon memorydb for redis"
+                Return ""
+            Case "amazon neptune"
+                Return "AWS Neptune"
+            Case "amazon quantum ledger database"
+                Return "AWS Quantum Ledger Database"
         End Select
+        If Mid(LCase(lucid), 1, 11) = "amazon ec2 " Then
+            Return "AWS EC2"
+        End If
         Return ""
     End Function
 
