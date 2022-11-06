@@ -30,12 +30,33 @@ Public Class TM_Client
     Public roleS As List(Of tmMiscTrigger)
     Public dataElements As List(Of tmMiscTrigger)
 
+    Public isTMsix As Boolean
 
     Public Sub New(fqdN$, uN$, pw$)
+        isTMsix = False
 
         tmFQDN = fqdN
 
         Me.isConnected = False
+
+
+        If Len(uN) > 0 And Len(pw) = 0 Then
+            isTMsix = True
+            Console.WriteLine("6.0 credentials provided")
+            slToken = uN ' the api key 6.0 is now associated with 5.5 bearer token
+            Dim uCheck As currUser = New currUser
+            Me.isConnected = True
+            uCheck = getCurrentUser()
+
+            If uCheck.email = "" Then
+                Me.isConnected = False
+                Console.WriteLine("Unable to access with API KEY - are you sure " + fqdN + " is running 6.0?")
+                Exit Sub
+            End If
+            Me.isConnected = True
+            Console.WriteLine("Connecting as " + uCheck.userName + " to " + fqdN)
+            Exit Sub
+        End If
 
         'Console.WriteLine("New TM_Client activated: " + Replace(tmFQDN, "https://", ""))
 
@@ -118,21 +139,41 @@ Public Class TM_Client
 
         response = client.Execute(request)
 
-        Dim K As Integer
-        K = 1
 
     End Function
-    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False, Optional ByVal addFileN$ = "") As String
+    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False, Optional ByVal addFileN$ = "", Optional ByVal thisIsPATCH As Boolean = False) As String
         getAPIData = ""
         If isConnected = False Then Exit Function
 
+        Dim debugInfo As Boolean = False
+
         Dim client = New RestClient(tmFQDN + urI)
         Dim request As RestRequest
-        If usePOST = False Then request = New RestRequest(Method.GET) Else request = New RestRequest(Method.POST)
+        If usePOST = False Then
+            request = New RestRequest(Method.GET)
+        Else
+            If thisIsPATCH = False Then
+                request = New RestRequest(Method.POST)
+            Else
+                request = New RestRequest(Method.PATCH)
+            End If
+        End If
+
+        If debugInfo Then
+            Dim gOrP$ = "GET"
+            If usePOST Then gOrP = "POST"
+            If thisIsPATCH Then gOrP = "PATCH"
+            Console.WriteLine(vbCrLf + "------API CALL------" + vbCrLf + gOrP + ": " + tmFQDN + urI)
+            'If usePOST Then Console.WriteLine("JSON Body: " + addJSONbody)
+        End If
 
         Dim response As IRestResponse
 
-        request.AddHeader("Authorization", "Bearer " + slToken)
+        If isTMsix = False Then
+            request.AddHeader("Authorization", "Bearer " + slToken)
+        Else
+            request.AddHeader("X-ThreatModeler-ApiKey", slToken)
+        End If
         request.AddHeader("Accept", "application/json")
 
         If Len(addJSONbody) Then
@@ -147,16 +188,29 @@ Public Class TM_Client
             'adding this (Lenovo Chinese) messes up API calls for COmponentTypes and Attributes (prob more)
 
             request.AddHeader("Connection", "keep-alive")
+            'If isTMsix = True Then
+            '    request.AddJsonBody(addJSONbody)
+            ' Else
             If addingComp = False Then
                 request.AddParameter("application/json", addJSONbody, ParameterType.RequestBody)
             Else
                 request.AddParameter("data", addJSONbody, ParameterType.RequestBody)
                 request.AlwaysMultipartFormData = True
             End If
+            'End If
+        End If
+
+        If debugInfo Then
+            For Each hh In request.Parameters
+                Dim hVal$ = hh.Value
+                If Mid(hh.Value, 1, 7) = "Bearer " Then hVal = "Bearer redacted" Else hVal = hh.Value
+                Console.WriteLine(hh.Name + ":" + hVal)
+            Next
         End If
 
         If Len(addFileN) Then
             request.AddFile("File", addFileN)
+            If debugInfo Then Console.WriteLine("File added: " + addFileN)
         End If
 
         response = client.Execute(request)
@@ -165,9 +219,23 @@ Public Class TM_Client
             Return response.Content
         End If
 
+        If Len(response.Content) = 0 Then
+            If debugInfo Then Console.WriteLine("No response provided")
+            getAPIData = ""
+            Exit Function
+        End If
+
         Dim O As JObject = JObject.Parse(response.Content)
 
-        If IsNothing(O.SelectToken("IsSuccess")) = True Then
+        If debugInfo Then
+            Console.WriteLine(vbCrLf + "RESPONSE:" + vbCrLf + response.Content)
+        End If
+
+        Dim isSuccessStr$ = "IsSuccess"
+        If isTMsix = True Then isSuccessStr = "isSuccess"
+
+
+        If IsNothing(O.SelectToken(isSuccessStr)) = True Then
             Console.WriteLine("API Request Rejected:  " + urI)
             getAPIData = ""
             Exit Function
@@ -181,12 +249,14 @@ Public Class TM_Client
         '            End If
         '        End If
 
-        If CBool(O.SelectToken("IsSuccess")) = False Then
+        If CBool(O.SelectToken(isSuccessStr)) = False Then
             getAPIData = "ERROR:Could not retrieve " + urI
             Exit Function
         End If
 
-        Return O.SelectToken("Data").ToString
+        Dim dStr$ = "Data"
+        If isTMsix Then dStr = "data"
+        Return O.SelectToken(dStr).ToString
     End Function
 
     Public Function getMatildaDiscover(fileN$) As matildaApp
@@ -259,6 +329,25 @@ Public Class TM_Client
         getGroups = JsonConvert.DeserializeObject(Of List(Of tmGroups))(jsoN)
 
     End Function
+
+
+    Public Function getUsersSIX() As List(Of tmUser)
+        getUsersSIX = New List(Of tmUser)
+        Dim jsoN$ = getAPIData("/api/users")
+
+        getUsersSIX = JsonConvert.DeserializeObject(Of List(Of tmUser))(jsoN)
+
+    End Function
+
+    Public Function getCurrentUser() As currUser
+        getCurrentUser = New currUser
+        Dim jsoN$ = getAPIData("/api/user/loginuserdetails")
+
+        getCurrentUser = JsonConvert.DeserializeObject(Of currUser)(jsoN)
+
+    End Function
+
+
     Public Function getAWSaccounts() As List(Of tmAWSacc)
         getAWSaccounts = New List(Of tmAWSacc)
         Dim jsoN$ = getAPIData("/api/thirdparty/list/AWS")
@@ -337,7 +426,21 @@ errorcatch:
 
     End Function
 
+    Public Function getTemplateSIX(tempID As Integer) As List(Of tmTemplate6)
+        getTemplateSIX = New List(Of tmTemplate6)
+        Dim jsoN$ = getAPIData("/api/template/detail", True, "[" + tempID.ToString + "]") '/" + tempID.ToString)
 
+        getTemplateSIX = JsonConvert.DeserializeObject(Of List(Of tmTemplate6))(jsoN)
+    End Function
+
+    Public Function getTemplateList() As List(Of tmTemplate)
+        getTemplateList = New List(Of tmTemplate)
+        Dim jsoN$ = getAPIData("/api/template/templates") '/" + tempID.ToString)
+
+        getTemplateList = JsonConvert.DeserializeObject(Of List(Of tmTemplate))(jsoN)
+
+
+    End Function
 
     Public Function getProjectsOfGroup(G As tmGroups) As List(Of tmProjInfo)
         getProjectsOfGroup = New List(Of tmProjInfo)
@@ -369,9 +472,22 @@ errorcatch:
         getTFComponents = New List(Of tmComponent)
 
         Dim jBody$ = ""
-        jBody = JsonConvert.SerializeObject(T)
+        Dim urL$ = "/api/threatframework"
 
-        Dim jsoN$ = getAPIData("/api/threatframework", True, jBody$)
+        If isTMsix Then
+            Dim tF6 As tfRequest6 = New tfRequest6
+            With tF6
+                .entityTypeName = "Component"
+                .showHiddenOnly = False
+                .libraryId = 0
+            End With
+            jBody = JsonConvert.SerializeObject(tF6)
+            urL = "/api/library/getrecords"
+        Else
+            jBody = JsonConvert.SerializeObject(T)
+        End If
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
 
         getTFComponents = JsonConvert.DeserializeObject(Of List(Of tmComponent))(jsoN)
     End Function
@@ -549,6 +665,32 @@ errorcatch:
         getUsersOfGroup = JsonConvert.DeserializeObject(Of List(Of tmUserOfGroup))(json)
     End Function
 
+    Public Function removeUserFromGroup(removeReq As removeUserFromGroupReq) As Boolean
+        removeUserFromGroup = False
+        Dim jBody$ = JsonConvert.SerializeObject(removeReq)
+        Dim json$ = getAPIData("/api/group/removeusers", True, jbody)
+
+        If InStr(json, "ERROR") Then removeUserFromGroup = False Else removeUserFromGroup = True
+
+    End Function
+
+    Public Function transferUser(moveUser As moveUserToDeptReq) As Boolean
+        transferUser = False
+        Dim jBody$ = JsonConvert.SerializeObject(moveUser)
+        Dim json$ = getAPIData("/api/user/update", True, jBody,,, True)
+
+        If InStr(json, "ERROR") Then transferUser = False Else transferUser = True
+
+    End Function
+
+    Public Function deactivateUser(cancelUser As deactivateReq) As Boolean
+        deactivateUser = False
+        Dim jBody$ = JsonConvert.SerializeObject(cancelUser)
+        Dim json$ = getAPIData("/api/user/deactivate", True, jBody,,, True)
+
+        If InStr(json, "ERROR") Then deactivateUser = False Else deactivateUser = True
+
+    End Function
 
     Public Function getDepartments() As List(Of tmDept)
         getDepartments = New List(Of tmDept)
@@ -672,14 +814,29 @@ errorcatch:
         Return json
     End Function
 
-    Public Function grandModelAccess(modelID As Integer, groupList As List(Of groupPermsJSON)) As Boolean
+    Public Function grantModelAccess(modelID As Integer, groupList As List(Of groupPermsJSON)) As Boolean
         Dim newAccess As grantAccessReq = New grantAccessReq
         newAccess.Id = modelID
         newAccess.GroupPermissions = groupList
 
         Dim jBody$ = JsonConvert.SerializeObject(newAccess)
         Dim json$ = getAPIData("/api/project/grantaccess", True, jBody)
-        If InStr(json, "ERROR") Then grandModelAccess = False Else grandModelAccess = True
+        If InStr(json, "ERROR") Then grantModelAccess = False Else grantModelAccess = True
+
+    End Function
+
+    '{"Id"2089,"GroupPermissions":[],"UserPermissions":[{"Id":287,"Email":"somenewuser@tm.com","Name":"SomeNewUser","Permission":0,"Type":"Users","UserId":287}]}
+
+    Public Function revokeModelAccessFromUser(modelID As Integer, useRS As List(Of permUsersJSON)) As Boolean
+        revokeModelAccessFromUser = False
+        Dim removeAccess As grantAccessReq = New grantAccessReq
+        removeAccess.Id = modelID
+        removeAccess.UserPermissions = useRS
+
+        Dim jBody$ = JsonConvert.SerializeObject(removeAccess)
+
+        Dim json$ = getAPIData("/api/project/revokeaccess", True, jBody)
+        If InStr(json, "ERROR") Then revokeModelAccessFromUser = False Else revokeModelAccessFromUser = True
 
     End Function
 
@@ -2053,6 +2210,19 @@ skipThose:
 
         Return -1
     End Function
+    Public Function ndxDEPT(ByVal deptID As Long, ByRef DEPTs As List(Of tmDept)) As Integer
+        'finds object (for now, the node of a model) matching idOFnode
+        Dim K As Long = 0
+
+        For Each N In DEPTs
+            If N.Id = deptID Then
+                Return K
+            End If
+            K += 1
+        Next
+
+        Return -1
+    End Function
 
     Public Function ndxATTR(ID As Long) As Integer
         ndxATTR = -1
@@ -2318,15 +2488,19 @@ skipThose:
 
         Dim ndX As Integer = 0
         For Each P In lib_Comps
+            If LCase(P.Name) = "Developers" Then
+                Dim K As Integer
+                K = 1
+            End If
             If LCase(P.Name) = LCase(name) Then
                 If Len(typeOnly) Then
                     If LCase(P.ComponentTypeName) <> LCase(typeOnly) Then GoTo nextInList
                 End If
-                    Return ndX
-                    Exit Function
-                End If
+                Return ndX
+                Exit Function
+            End If
 nextInList:
-                ndX += 1
+            ndX += 1
         Next
 
     End Function
@@ -2577,6 +2751,12 @@ Public Class tfRequest
     Public ShowHidden As Boolean
 End Class
 
+Public Class tfRequest6
+    Public libraryId As Integer
+    Public entityTypeName As String
+    Public showHiddenOnly As Boolean
+End Class
+
 Public Class groupPermsJSON
 
     '{
@@ -2601,6 +2781,11 @@ Public Class groupPermsJSON
     '  ],
     '  "UserPermissions": []
     '
+    ' {"Id":2089,"GroupPermissions":[],
+    '"UserPermissions":
+    '[{"Id":287,"Email":"somenewuser@tm.com","Name":"SomeNewUser","Permission":0,"Type":"Users","UserId":287}]}
+
+
     Public Id As Integer
     Public Email As String
     Public Name As String
@@ -2609,14 +2794,95 @@ Public Class groupPermsJSON
     Public GroupId As Integer
 End Class
 
+Public Class permUsersJSON
+    Public Id As Integer
+    Public Email As String
+    Public Name As String
+    Public Permission As Integer
+    Public [Type] As String
+    Public UserId As Integer
+End Class
+
+
+' group permissions
+'
+' {"Id":3,"Name":"Content Management","isSystem":true,"ParentGroupId":0,"ParentGroupName":null,"Department":"Corporate","DepartmentId":1,
+' "Guid":"a1bfe705-7939-4f81-96df-7abeff0aa57e","Projects":null,
+' "GroupUsers":[
+'{"Id":260,"GroupId":0,"GroupName":null,"UserId":287,"UserName":"SomeNewUser","isReadOnly":false,"isAdmin":true,"Guid":null,"Activated":true,
+' "UserEmail":"somenewuser@tm.com"}]}
+' 
+' /api/group/removeusers
+' 
+
+' move user
+' {"Id"287,"Name":"SomeNewUser","Email":"somenewuser@tm.com","Username":"somenewuser@tm.com","UserRoleId":1,"UserRoleName":"Admin","Activated":true,
+' "LastLogin":null, "DepartmentId": 121,"UserDepartmentName":"Corporate",
+' "AspNetUserId":"daf42027-55a5-4bcb-bccb-72d7e1591c85","GroupUsers":null, "TransferOwnershipToUserId": null, "TransferOwnership": false,
+' "ReceiveLicenseEmailNotification":false,"LicenseRenewalEmailNotificationSent":false,"Company":null, "ApiKey": null}
+
+
+' deactivate user
+' {"transferOwnership"false,"UserIdToDeactivates":["daf42027-55a5-4bcb-bccb-72d7e1591c85"]}
+
+Public Class deactivateReq
+    Public transferOwnership As Boolean
+    Public UserIdToDeactivates As List(Of String) 'these are aspNetUserIds
+
+End Class
+Public Class moveUserToDeptReq
+    Public Id As Integer
+    Public Name As String
+    Public Email As String
+    Public Username As String
+    Public UserRoleId As Integer
+    Public UserRoleName As String
+    Public Activated As Boolean
+    Public LastLogin As String 'leave null
+    Public DepartmentId As Integer
+    Public UserDepartmentName As String
+    Public AspNetUserId As String
+    Public GroupUsers As String 'leave null
+    Public TransferOwnershipToUserId As Integer 'leave null
+    Public TransferOwnership As Boolean 'make it false until test transfer
+    Public ReceiveLicenseEmailNotification As Boolean
+    Public LicenseRenewalEmailNotificationSent As Boolean
+    Public Company As String 'null
+    Public ApiKey As String 'null
+
+End Class
+Public Class removeUserFromGroupReq
+    Public Id As Integer
+    Public Name As String
+    Public isSystem As Boolean
+    Public ParentGroupId As Integer
+    Public ParentGroupName As String
+    Public Department As String
+    Public DepartmentId As Integer
+    Public Guid? As System.Guid
+    Public Projects As String
+    Public GroupUsers As List(Of removeUserClass)
+End Class
+Public Class removeUserClass
+    Public Id As Integer
+    Public GroupId As Integer
+    Public GroupName As String
+    Public UserId As Integer
+    Public UserName As String
+    Public isReadOnly As Boolean
+    Public isAdmin As Boolean
+    Public Guid? As System.Guid
+    Public Activated As Boolean
+    Public UserEmail As String
+End Class
 Public Class grantAccessReq
     Public Id As Integer
     Public GroupPermissions As List(Of groupPermsJSON)
-    Public UserPermissions As List(Of groupPermsJSON)
+    Public UserPermissions As List(Of permUsersJSON)
 
     Public Sub New()
         GroupPermissions = New List(Of groupPermsJSON)
-        UserPermissions = New List(Of groupPermsJSON)
+        UserPermissions = New List(Of permUsersJSON)
     End Sub
 End Class
 Public Class newUserJSON
@@ -2687,18 +2953,26 @@ Public Class tmVPC
 
 End Class
 Public Class tmGroups
-        Public Id As Long
-        Public Name$
-        Public isSystem As Boolean
-        Public ParentGroupId As Integer
-        Public ParentGroupName$
-        Public Department$
-        Public DepartmentId$
-        Public Guid As System.Guid
+    Public Id As Long
+    Public Name$
+    Public isSystem As Boolean
+    Public ParentGroupId As Integer
+    Public ParentGroupName$
+    Public Department$
+    Public DepartmentId$
+    Public Guid As System.Guid
     'Public Projects$
     'Public GroupUsers$
     Public AllProjInfo As List(Of tmProjInfo)
-    End Class
+End Class
+
+Public Class tmTemplate6
+    Public id As String
+    Public name As String
+    Public json As String
+    Public diagramData As String
+    Public guid As String
+End Class
 Public Class tmTemplate
     Public Id As Long
     Public Name$
@@ -2717,6 +2991,7 @@ Public Class tmTemplate
     Public DiagramData$
     Public LibraryName$
     Public isUpdate As Boolean
+    Public guid As String
     Public ReadOnly Property TempId
         Get
             Return Id
@@ -2880,6 +3155,19 @@ Public Class tmProjInfo
     'Public nodesFromThreats As Integer 'beginning at 300k, nodes from threats like HTTPS
 End Class
 
+Public Class currUser
+    'this is a 6.0 class
+    Public email As String
+    Public id As String
+    Public userName As String
+    Public userInfo As tmUserSix
+End Class
+Public Class tmUserSix
+    Public Id As Integer
+    Public Name As String
+    Public Email As String
+    Public Username As String
+End Class
 Public Class tmDept
     Public Id As Integer
     Public Name$
@@ -2919,6 +3207,7 @@ Public Class tmUser
     Public Username As String
     Public UserRoleId As Integer
     Public UserRoleName As String
+    Public AspNetUserId As String
     Public Activated As Boolean
     Public LastLogin? As DateTime
     Public DepartmentId As Integer

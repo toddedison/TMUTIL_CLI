@@ -23,6 +23,9 @@ Module modCommon
     Public Sub addLoginCreds(fqdN$, uN$, pW$)
         Dim S3 As New Simple3Des("7w6e87twryut24876wuyeg")
 
+        Dim isAPIKEY As Boolean = False
+        If pW = "" Then isAPIKEY = True
+
         ' if exists, don't add
         Dim LL As Collection
         LL = getLogins()
@@ -40,7 +43,11 @@ Module modCommon
 
         ' safeKILL("logins")
         FileOpen(FF, "logins", OpenMode.Append)
-        Print(FF, fqdN + "|" + sKeyU + "|" + sKeyP + Chr(13))
+        If isAPIKEY = False Then
+            Print(FF, fqdN + "|" + sKeyU + "|" + sKeyP + Chr(13))
+        Else
+            Print(FF, fqdN + "|" + sKeyU + Chr(13))
+        End If
         FileClose(FF)
 
         S3 = Nothing
@@ -125,9 +132,6 @@ Module modCommon
         Return countChars(a, "(")
     End Function
 
-    Public Function returnInnerObjects(ByVal a$, Optional ByVal depth As Integer = 1) As String
-
-    End Function
 
     Public Function returnOutsideObject(ByVal a$) As String
         returnOutsideObject = ""

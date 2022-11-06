@@ -19,19 +19,34 @@ Module Program
         Dim fqD$ = argValue("fqdn", args)
         Dim usR$ = argValue("un", args)
         Dim pwD$ = argValue("pw", args)
+        Dim apiKey$ = argValue("apikey", args)
 
         If actionWord = "makelogin" Then
-            If fqD = "" Or usR = "" Or pwD = "" Then
-                Console.WriteLine("Must provide all 3 arguments: FQDN, UN and PW")
+            If fqD = "" Then
+                Console.WriteLine("Must provide FQDN argument (fully qualified domain name eg demo.threatmodeler.com)")
+                End
+            End If
+            If usR = "" Or pwD = "" Then
+                If apiKey = "" Then
+                    Console.WriteLine("You must provide an API key if you are not going to provide a UN/PW")
+                    End
+                End If
+            Else
+                Console.WriteLine("Must provide all 3 arguments for 5.5 (FQDN, UN and PW) or 2 for 6 (FQDN, APIKEY)")
+                End
             End If
 
-            Console.WriteLine(usR + "|" + pwD)
+            If Len(apiKey) Then
+                usR = apiKey
+                pwD = ""
+            End If
+            Console.WriteLine(fqD + "|" + pwD)
             Call addLoginCreds(fqD, usR, pwD)
-            Console.WriteLine("Credentials added to login file - note only the first set of credentials is used")
-            End
-        End If
+                Console.WriteLine("Credentials added to login file - note only the first set of credentials is used")
+                End
+            End If
 
-        Dim lgnS = getLogins()
+            Dim lgnS = getLogins()
         If lgnS.Count = 0 And fqD + usR + pwD = "" Then
             Console.WriteLine("Make sure you have a login file or specify FQDN,UN,PW - with login file, the first entry will be used to log in")
             End
@@ -55,7 +70,7 @@ Module Program
 
         If T.isConnected = True Then
             '            addLoginCreds(fqdN, uN, pW)
-            Console.WriteLine("Bearer Token Obtained/ Client connection established - ^C to abort at any time")
+            If T.isTMsix = False Then Console.WriteLine("Bearer Token Obtained/ Client connection established - ^C to abort at any time")
         Else
             End
         End If
@@ -319,10 +334,54 @@ tryGroup3:
 doneLoop:
 
                     If grpList.Count Then
-                        Console.Write("Adding " + grpList.Count.ToString + " groups to Project ID " + M.ToString + ": " + T.projOfNDX(M, PP).Name + " - " + T.grandModelAccess(M, grpList).ToString + vbCrLf)
+                        Console.Write("Adding " + grpList.Count.ToString + " groups to Project ID " + M.ToString + ": " + T.projOfNDX(M, PP).Name + " - " + T.grantModelAccess(M, grpList).ToString + vbCrLf)
                     End If
                 Next
                 End
+
+            Case "remove_user_access"
+                ' match (email or username) --user or --file // can discover home dept, need target dept
+                ' With employee to remove
+                '       Remove from any Groups
+                '       Remove from any Model
+                '       Transfer to target Department
+                '       Deactivate User
+                Console.WriteLine("This command performs the following steps of 1 or more users:" + vbCrLf + "  - Removes from any groups")
+                Console.WriteLine("  - Removes shares from any project" + vbCrLf + "  - Moves user to a specific Department (--TARGETDEPT)")
+                Console.WriteLine("  - Deactivates the User" + vbCrLf)
+                Console.WriteLine("If single user, specify --USER (name or email, per match), --MATCH name/email, --TARGETDEPT (dept name)")
+                Console.WriteLine("If multiple, provide --FILE inputfile.csv and specify --MATCH for either name or email match.")
+                Console.WriteLine("CSV file should be USER,TARGET_DEPT for each line." + vbCrLf)
+                Console.WriteLine("File example:        tmutil remove_user_access --file inputfile.csv --match email")
+                Console.WriteLine("User example:        tmutil remove_user_access --user john@tm.com --match email --targetdept DEACTIVATED_GROUP" + vbCrLf)
+
+
+                Dim matcH$ = argValue("match", args)
+                If matcH = "" Then
+                    Console.WriteLine("You must specify --MATCH name or --MATCH email to determine how users are identified")
+                    End
+                End If
+                Dim userToRemove$ = argValue("user", args)
+                Dim uFile$ = argValue("file", args)
+                Dim targetDept$ = argValue("targetdept", args)
+
+                If Len(uFile) Then
+                    If Dir(uFile) = "" Then
+                        Console.WriteLine("File does not exist. CSV file with 2 fields - User,TargetDept")
+                        End
+                    End If
+                Else
+                    If Len(targetDept) = 0 Then
+                        Console.WriteLine("You must specify a department to move this user to")
+                    End If
+                    If Len(userToRemove) = 0 Then
+                        Console.WriteLine("You must specify either a user to remove access for or a file of users")
+                        End
+                    End If
+                End If
+
+                Call removeUserAccess(matcH, userToRemove, uFile$, targetDept$)
+
 
             Case "add_users"
                 Dim fileN$ = argValue("file", args)
@@ -774,7 +833,7 @@ doneHere:
                     FF = FreeFile()
                     Console.WriteLine("Writing to CSV File: " + fileN)
                     FileOpen(FF, fileN, OpenMode.Output)
-                    Print(FF, "Name,Label" + vbCrLf)
+                    Print(FF, "ID,Label" + vbCrLf)
                 End If
 
                 Dim qq$ = Chr(34)
@@ -1059,6 +1118,13 @@ skipSR:
 
 
             Case "get_users"
+                If T.isTMsix = True Then
+                    Dim aU As List(Of tmUser)
+                    aU = T.getUsersSIX()
+                    Console.WriteLine("# of Users: " + aU.Count.ToString)
+                    End
+                End If
+
                 Dim deptId As Integer = 0
                 Dim allDepts As List(Of tmDept) = T.getDepartments
                 Console.WriteLine("# of Departments: " + allDepts.Count.ToString)
@@ -3094,6 +3160,107 @@ nextTMP:
 
                 End
 
+            Case "template_check"
+                'Console.WriteLine("This API designed for 6.0 only")
+                Dim tID As Integer
+                tID = Val(argValue("id", args))
+                If tID = 0 Then
+                    Console.WriteLine("Must provide an ID")
+                End If
+
+                loadNTY(T, "Components")
+
+                Dim numWithErrors As Integer = 0
+
+                Dim missingComps As Collection = New Collection
+                Dim missingOccur(120) As Integer
+
+
+                'Dim temp2Check As List(Of tmTemplate6) = New List(Of tmTemplate6)
+                Dim temp2Check As List(Of tmTemplate) = New List(Of tmTemplate)
+                temp2Check = T.getTemplateList()
+
+                '                Console.WriteLine(temp2Check.Count.ToString)
+                '                For Each temp In temp2Check
+                '                Console.WriteLine("Template Name: " + temp.name)
+                '                Next
+
+                Dim numNodeErrors As Integer = 0
+                Dim numNodeFixes As Integer = 0
+
+                For Each temP In temp2Check
+                    Console.WriteLine("[" + temP.Id.ToString + "] " + temP.Name + " " + temP.guid)
+
+                    Dim tS As tmTemplate6 = New tmTemplate6
+                    Dim tSlist As List(Of tmTemplate6) = New List(Of tmTemplate6)
+                    tSlist = T.getTemplateSIX(temP.Id)
+                    tS = tSlist(0)
+
+                    Dim sqL$ = ""
+
+                    sqL = tS.Json
+
+                    Dim qq$ = Chr(34)
+                    Dim nIds As List(Of String) = jsonValues(tS.Json, "NodeId")
+                    Dim ndxNID As Integer = 0
+                    Dim numErrors As Integer = 0
+
+                    For Each N In nIds
+                        Dim C1 As tmComponent
+
+                        Dim ndxC1 As Integer = 0
+                        ndxC1 = T.ndxComp(Val(N))
+
+                        If ndxC1 = -1 Then
+                            Dim compLookingFor$ = Replace(jsonGetNear(tS.json, "NodeId" + Chr(34) + ":" + N, "Name"), Chr(34), "")
+                            Console.WriteLine("Unable to find NodeId=" + N + " (NAME=" + compLookingFor + ")")
+
+                            Dim suggesT As tmComponent = New tmComponent
+                            Dim suggestNDX As Integer = T.ndxCompbyName(compLookingFor)
+                            If suggestNDX <> -1 Then
+                                suggesT = T.lib_Comps(T.ndxCompbyName(compLookingFor))
+                                'Console.WriteLine("FOUND MATCH: " + suggesT.Name + " [" + suggesT.Id.ToString + "]")
+                                numNodeFixes += 1
+                            Else
+                                'Console.WriteLine("CANNOT FIND MATCH FOR " + compLookingFor)
+                                Dim missNDX As Integer = grpNDX(missingComps, compLookingFor)
+                                If missNDX = 0 Then
+                                    missingComps.Add(compLookingFor)
+                                    missingOccur(missingComps.Count - 1) = 1
+                                Else
+                                    missingOccur(missNDX - 1) += 1
+                                End If
+
+                                numNodeErrors += 1
+                            End If
+
+                            numErrors += 1
+                            GoTo nextNID2
+                        End If
+
+                        C1 = T.lib_Comps(ndxC1)
+
+
+nextNID2:
+                        ndxNID += 1
+                    Next
+
+                    If numErrors > 0 Then numWithErrors += 1
+                    Console.WriteLine("     # of unidentified nodes: " + numErrors.ToString)
+
+                Next
+                Console.WriteLine(vbCrLf + "# of Items in List: " + temp2Check.Count.ToString)
+                Console.WriteLine(vbCrLf + "# with Errors     : " + numWithErrors.ToString)
+                Console.WriteLine(vbCrLf + "TL Bad Nodes      : " + numNodeErrors.ToString)
+                Console.WriteLine(vbCrLf + "TL Can Nodes Fix  : " + numNodeFixes.ToString)
+
+                Dim Kc As Integer = 0
+
+                For Kc = 1 To missingComps.Count
+                    Console.WriteLine(missingComps(Kc) + ": " + missingOccur(Kc - 1).ToString + " occurrences")
+                Next
+
+                End
 
             Case "i2i_bestmatch"
                 Dim i1 = argValue("i1", args)
@@ -5706,13 +5873,15 @@ nope:
         loginItem = ""
 
         Dim lDetails() As String = Split(L, "|")
-        If UBound(lDetails) < 2 Then Exit Function
+        If UBound(lDetails) < 1 Then Exit Function
 
         If itemNum = 0 Then
             Return lDetails(0)
         Else
-            Dim S3 As New Simple3Des("7w6e87twryut24876wuyeg")
-            loginItem = S3.Decode(lDetails(itemNum))
+            If itemNum <= UBound(lDetails) Then
+                Dim S3 As New Simple3Des("7w6e87twryut24876wuyeg")
+                loginItem = S3.Decode(lDetails(itemNum))
+            End If
         End If
 
         GC.Collect()
@@ -7823,6 +7992,241 @@ doneHere:
 cannotImport:
         FileClose(FF)
     End Sub
+
+    Private Sub removeUserAccess(matcH$, userToRemove$, uFile$, targetDept$)
+        Dim usersToDelete As List(Of tmUser) = New List(Of tmUser) '  Collection
+        Dim targetDepts As Collection = New Collection
+        Dim usersFromInput As Collection = New Collection
+        Dim targetDeptIds As Collection = New Collection
+
+        If Len(uFile) Then
+            Dim FF As Integer
+            FF = FreeFile()
+            FileOpen(FF, uFile, OpenMode.Input)
+            Do Until EOF(FF) = True
+                Dim uInfo() = Split(LineInput(FF), ",")
+                If UBound(uInfo) < 1 Then
+                    FileClose(FF)
+                    Console.WriteLine("This file must have at least 2 fields per line: user,target_department. For instance, to move user JSMITH to department DEACTIVATED_USERS, the line should read 'jsmith,deactivated_users'")
+                    End
+                End If
+                usersFromInput.Add(uInfo(0))
+                targetDepts.Add(uInfo(1))
+            Loop
+            FileClose(FF)
+        Else
+            usersFromInput.Add(userToRemove)
+            targetDepts.Add(targetDept)
+        End If
+
+        Dim usersToRemove As List(Of tmUser) = New List(Of tmUser)
+
+        Console.WriteLine("Loading Departments, Groups, Projects and checking Users of each Dept")
+
+        Dim allDepts As List(Of tmDept) = T.getDepartments
+        Dim allUsers As List(Of tmUser) = New List(Of tmUser)
+
+
+        Dim userID As Integer = 0
+        Dim usersDeptId As Integer = 0
+        Dim deptName$ = ""
+
+        Dim GG As List(Of tmGroups) = T.getGroups()
+        Dim PP As List(Of tmProjInfo)
+        PP = T.getAllProjects()
+
+        Dim currUser As tmUser = New tmUser
+
+        For userLoop = 1 To usersFromInput.Count
+
+            For Each DD In allDepts
+                allUsers = T.getUsers(DD.Id)
+                For Each U In allUsers
+                    Select Case LCase(matcH)
+                        Case "email"
+                            If LCase(U.Email) = LCase(usersFromInput(userLoop)) Then
+                                userID = U.Id
+                                usersDeptId = DD.Id
+                                deptName = DD.Name
+                                usersToRemove.Add(U)
+                                currUser = U
+                            End If
+                        Case "user"
+                            If LCase(U.Name) = LCase(usersFromInput(userLoop)) Then
+                                userID = U.Id
+                                usersDeptId = DD.Id
+                                deptname = DD.Name
+                                usersToRemove.Add(U)
+                                currUser = U
+                            End If
+                    End Select
+                Next
+            Next
+
+            If usersDeptId = 0 Or userID = 0 Then
+                Console.WriteLine("ERROR: Unable to locate user " + usersFromInput(userLoop) + " by match on " + matcH + " in any department. Aborting user.")
+                GoTo skipUserLoop
+            Else
+                Console.WriteLine("Found User " + currUser.Name + " [" + currUser.Id.ToString + "] inside Department #" + usersDeptId.ToString + ": " + deptName)
+                ' sanity check target department
+                Dim targetDNDX As Integer = -1
+                Dim dLoop As Integer = 0
+                For dLoop = 0 To allDepts.Count - 1
+                    If LCase(allDepts(dLoop).Name) = LCase(targetDepts(userLoop)) Then
+                        targetDNDX = dLoop
+                    End If
+                Next dLoop
+                If targetDNDX = -1 Then
+                    Console.WriteLine("Unable to locate target department '" + targetDepts(userLoop) + "' - Aborting")
+                    End
+                Else
+                    targetDeptIds.Add(targetDNDX)
+                End If
+            End If
+
+skipUserLoop:
+        Next userLoop
+
+        Console.WriteLine(vbCrLf + "Looking for group memberships.." + vbCrLf)
+
+            Dim counteR As Integer = 0
+            For Each G In GG
+                Dim usersOfGroup = T.getUsersOfGroup(G)
+
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+                Console.WriteLine(spaces(80))
+                counteR += 1
+                Console.WriteLine("Group " + counteR.ToString + "/" + GG.Count.ToString)
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+            '                Console.WriteLine(G.Name + " # Users: " + usersOfGroup.Count.ToString)
+
+            For Each currUser In usersToRemove
+                userID = currUser.Id
+
+                For Each uGRP In usersOfGroup
+                    If uGRP.UserId = userID Then
+                        Console.SetCursorPosition(0, Console.CursorTop - 1)
+                        Console.WriteLine(spaces(80))
+                        Console.WriteLine("Found " + currUser.Name + " [" + currUser.Email + "] in Group: " + G.Name + " [" + G.Id.ToString + "]")
+                        'Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                        ' set up obj
+                        Dim userRemoveReq As removeUserFromGroupReq = New removeUserFromGroupReq
+                        Dim userBye As removeUserClass = New removeUserClass
+                        With userBye
+                            .Id = uGRP.Id
+                            .GroupId = 0
+                            .UserId = currUser.Id
+                            .UserName = currUser.Username
+                            .Activated = currUser.Activated
+                            .UserEmail = currUser.Email
+                        End With
+                        With userRemoveReq
+                            .Id = G.Id
+                            .Name = G.Name
+                            .isSystem = G.isSystem
+                            .Department = G.Department
+                            .DepartmentId = G.DepartmentId
+                            .GroupUsers = New List(Of removeUserClass)
+                            .GroupUsers.Add(userBye)
+                            .Guid = G.Guid
+                        End With
+                        Console.WriteLine("   > > > Removing " + currUser.Name + " from " + G.Name + " : " + T.removeUserFromGroup(userRemoveReq).ToString + vbCrLf)
+                    End If
+                Next
+            Next
+
+        Next
+
+            counteR = 0
+            Console.WriteLine(vbCrLf + vbCrLf + "Looking for projects shared.." + vbCrLf)
+            For Each P In PP
+                '               Console.WriteLine("Project: " + P.Name)
+
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+                Console.WriteLine(spaces(80))
+                counteR += 1
+                Console.WriteLine("Project " + counteR.ToString + "/" + PP.Count.ToString)
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+
+                Dim submitNewPerms As Boolean = False
+
+                Dim modelPerms As tm_userGroupPermissions = T.getPermissionsOfModel(P.Id)
+                Dim removeUsers As List(Of permUsersJSON) = New List(Of permUsersJSON)
+
+            For Each currUser In usersToRemove
+                userID = currUser.Id
+                For Each usMOD In modelPerms.Users
+                    If usMOD.Id = userID Then
+                        Console.SetCursorPosition(0, Console.CursorTop - 1)
+                        Console.WriteLine(spaces(80))
+                        Console.WriteLine("USER: " + currUser.Name + "[" + currUser.Email + "] > Access shared by Project: " + P.Name + " [" + P.Id.ToString + "]")
+                        submitNewPerms = True
+                        Dim removeUser As permUsersJSON = New permUsersJSON
+                        With removeUser
+                            .Id = userID
+                            .Email = currUser.Email
+                            .Type = "Users"
+                            .Name = currUser.Name
+                            .Permission = 0
+                            .UserId = userID
+                        End With
+                        removeUsers.Add(removeUser)
+                    End If
+                Next
+                If submitNewPerms = True Then
+                    submitNewPerms = False
+                    Console.WriteLine("   > > > Removing access from " + currUser.Name + ".. " + T.revokeModelAccessFromUser(P.Id, removeUsers).ToString + vbCrLf)
+                End If
+            Next
+
+        Next
+
+        'Now we move users to Target Department
+        ' userloop through userstoremove corresponds with targetDeptIds as collection of NDX values
+
+        Console.WriteLine(vbCrLf + "Moving users to their new departments..")
+
+        Dim moveUserRequest As moveUserToDeptReq = New moveUserToDeptReq
+        For userLoop = 0 To usersToRemove.Count - 1
+            currUser = usersToRemove(userLoop)
+            With moveUserRequest
+                .Id = currUser.Id
+                .Name = currUser.Name
+                .Email = currUser.Email
+                .Username = currUser.Username
+                .UserRoleId = currUser.UserRoleId
+                .UserRoleName = currUser.UserRoleName
+                .Activated = currUser.Activated
+                .DepartmentId = allDepts(targetDeptIds(userLoop + 1)).Id
+                .UserDepartmentName = allDepts(T.ndxDEPT(currUser.DepartmentId, allDepts)).Name
+                .AspNetUserId = currUser.AspNetUserId
+                .TransferOwnership = False
+                .ReceiveLicenseEmailNotification = False
+                .LicenseRenewalEmailNotificationSent = False
+            End With
+            Console.WriteLine("   > > > Transferring " + currUser.Name + " to new Department: " + T.transferUser(moveUserRequest).ToString)
+        Next
+
+        Console.WriteLine(vbCrLf + "Deactivating users..")
+
+        For userLoop = 0 To usersToRemove.Count - 1
+            currUser = usersToRemove(userLoop)
+            Dim cancelReq As deactivateReq = New deactivateReq
+            With cancelReq
+                .transferOwnership = False
+                .UserIdToDeactivates = New List(Of String)
+                .UserIdToDeactivates.Add(currUser.AspNetUserId)
+            End With
+            Console.WriteLine("   > > > Deactivating " + currUser.Name + ": " + T.deactivateUser(cancelReq).ToString)
+        Next
+
+        End
+
+    End Sub
+
+
     Private Sub giveHelp()
         Console.WriteLine("USAGE: TMCLI action --param1 param1_value --param2 param2_value" + vbCrLf)
         Console.WriteLine("ACTIONS:")
@@ -7849,6 +8253,7 @@ cannotImport:
         Console.WriteLine(fLine("user_groups", "Returns User access to TF Groups, OPTIONAL --FILE (csv filename), --DEPT (id)"))
         Console.WriteLine(fLine("model_perms", "Returns Threat Model access by Groups and Users, OPTIONAL --FILE (csv filename)"))
         Console.WriteLine(fLine("add_model_access", "Adds up to 3 groups to a User's models, --METHOD user, either --NAME or --EMAIL for user, --grp1 (group name) --perm1 (RO,RW or AD) - also grp2/3"))
+        Console.WriteLine(fLine("remove_user_access", "Removes all shares of groups & projects, moves to target dept and deactivates. Use --FILE (csv) and --MATCH (email or user), or --USER --MATCH --TARGETDEPT"))
         Console.WriteLine(fLine("add_users", "Adds users from TXT/CSV file, REQUIRED --FILE (csv filename)"))
 
 
