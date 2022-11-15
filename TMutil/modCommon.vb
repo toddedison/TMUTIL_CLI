@@ -730,6 +730,9 @@ nextLine:
 
     End Function
 
+    Public Function qT(ByRef a$) As String
+        qT = Chr(34) + a + Chr(34)
+    End Function
 
     Public Sub saveJSONtoFile(jsonString$, ByVal errFN$) ', ByRef add2zip As Collection)
 
@@ -875,6 +878,7 @@ errorcatch:
             Return Convert.ToBase64String(ms.ToArray)
 
         End Function
+
 
         Private Function DecryptData(ByVal encryptedtext As String) As String
 

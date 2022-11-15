@@ -4372,6 +4372,10 @@ nextItem3:
                 End
 
             Case "i2i_comp_compare"
+                If T.isTMsix Then
+                    Call i2i_AllCompCompare60(args)
+                    End
+                End If
                 'This should be comp_compare
                 Dim cID1 As Integer = Val(argValue("id1", args))
                 Dim cID2 As Integer = Val(argValue("id2", args))
@@ -4720,6 +4724,18 @@ nextItem3:
                 PrintLine(FF, bigStr)
                 FileClose(FF)
 
+                End
+
+                ' ------------------------------------------------------------------------------------------
+                ' ------------------------------------------------------------------------------------------
+                ' ------------------------------------------------------------------------------------------
+                ' ------------------------------------------------------------------------------------------
+                ' ------------------------------------------------------------------------------------------
+                ' ------------------------------------------------------------------------------------------
+                '' ------------------------       TM60 COMMANDS SECTION ------------------------------------
+
+            Case "i2i_compcompare60"
+                Call i2i_AllCompCompare60(args)
                 End
 
 
@@ -7463,6 +7479,7 @@ skipDept2:
     End Sub
 
     Private Sub loadNTY(clienT As TM_Client, ByVal ntyType$)
+        If clienT.isTMsix = True Then GoTo version6
         Dim R As New tfRequest
 
         With R
@@ -7493,6 +7510,21 @@ skipDept2:
                 R.EntityType = "DataElements"
                 clienT.dataElements = clienT.getEntityMisc(R)
 
+        End Select
+        Exit Sub
+
+version6:
+        Select Case LCase(ntyType)
+            Case "components"
+                clienT.lib_Comps6 = clienT.getTF6Components()
+            Case "threats"
+                clienT.lib_TH6 = clienT.getTF6Threats()
+            Case "securityrequirements"
+                clienT.lib_SR6 = clienT.getTF6Requirements()
+            Case "attributes"
+                clienT.lib_AT6 = clienT.getTF6Attributes()
+            Case "compdefs"
+                '                clienT.lib_CompStructures = clienT.getTF6CompDef()
         End Select
         'Console.WriteLine("Loaded " + R.EntityType + " from " + clienT.tmFQDN)
     End Sub
@@ -8226,6 +8258,210 @@ skipUserLoop:
 
     End Sub
 
+
+
+
+
+
+
+
+
+
+
+
+    ' ---------------------------------------------------------------------------------------------
+    ' ---------------------------------------------------------------------------------------------
+    ' ---------------------------------------------------------------------------------------------
+    '           6.0 exclusive section.. . 6.0 API calls only
+    ' ---------------------------------------------------------------------------------------------
+    ' ---------------------------------------------------------------------------------------------
+    ' ---------------------------------------------------------------------------------------------
+
+
+    Private Sub i2i_AllCompCompare60(ByVal args() As String)
+        'This should be comp_compare
+        Dim i2 = argValue("i2", args)
+        Dim file$ = argValue("file", args)
+        Dim doCSV As Boolean = False
+        Dim FF As Integer = 0
+
+        If Len(file) Then
+            Call safeKILL(file)
+            doCSV = True
+        End If
+
+        Dim T2 As TM_Client = returnTMClient(i2)
+        If IsNothing(T2) = True Then
+            Console.WriteLine("Unable to connect to " + i2)
+            End
+        End If
+
+        If T2.isConnected = True Then
+            Console.WriteLine("Connected to both I1: " + T.tmFQDN + " and I2: " + T2.tmFQDN)
+        Else
+            Console.WriteLine("Unable to connect to " + i2)
+            End
+        End If
+
+        Console.WriteLine("Loading components, threats, requirements and attributes from both instances..")
+        Console.WriteLine(vbCrLf)
+        Console.WriteLine("                  I1 / I2")
+
+        Call loadNTY(T, "Components") : Call loadNTY(T2, "Components")
+        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString + "/" + T2.lib_Comps6.Count.ToString)
+        Call loadNTY(T, "Threats") : Call loadNTY(T2, "Threats")
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString + "/" + T2.lib_TH6.Count.ToString)
+        Call loadNTY(T, "SecurityRequirements") : Call loadNTY(T2, "SecurityRequirements")
+        Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString + "/" + T2.lib_SR6.Count.ToString)
+        Call loadNTY(T, "Attributes") : Call loadNTY(T2, "Attributes")
+        Console.WriteLine("Attributes    : " + T.lib_AT6.Count.ToString + "/" + T2.lib_AT6.Count.ToString)
+
+        'Call loadNTY(T, "CompDefs") : Call loadNTY(T2, "CompDefs")
+
+        Console.WriteLine(vbCrLf + "Begin Component Analysis.." + vbCrLf)
+
+        Dim matchGUIDs As Collection = New Collection
+        Dim t1GUIDunq As Collection = New Collection
+        Dim t2GUIDunq As Collection = New Collection
+
+        Dim K As Integer = 0
+
+        For K = 0 To T.lib_Comps6.Count - 1
+            ' find matches
+            If Len(T2.guidCOMP6(T.lib_Comps6(K).guid).name) Then
+                matchGUIDs.Add(T.lib_Comps6(K).guid)
+                '                Console.WriteLine(T.lib_Comps6(K).name + " >>>> " + T2.guidCOMP6(T2.lib_Comps6(K).guid).name)
+            Else
+                'unique to i1
+                t1GUIDunq.Add(T.lib_Comps6(K).guid)
+            End If
+        Next
+        Console.WriteLine("# of GUID matches: " + matchGUIDs.Count.ToString)
+        Console.WriteLine("# unique to I1   : " + t1GUIDunq.Count.ToString)
+        For K = 0 To T2.lib_Comps6.Count - 1
+            If grpNDX(matchGUIDs, T2.lib_Comps6(K).guid) = 0 Then
+                t2GUIDunq.Add(T2.lib_Comps6(K).guid)
+            End If
+        Next
+        Console.WriteLine("# unique to I2   : " + t2GUIDunq.Count.ToString)
+        Console.WriteLine("Total # Comps    : " + (matchGUIDs.Count + t2GUIDunq.Count + t1GUIDunq.Count).ToString)
+
+        If docsv = True Then
+            FF = FreeFile()
+            FileOpen(FF, file, OpenMode.Output)
+            Print(FF, "Library,Component,CompID,Comp_Type,#TH_I1,#SR_I1,#DIR_SR_I1,#ATTR_I1,MAX#TH_I1,MAX#SR_I1,#TH_I2,#SR_I2,#DIR_SR_I2,#ATTR_I2,MAX#TH_I2,MAX#SR_I2,#MATCH,#UNQ_I1,#UNQ_I2,#ID_DIFF,#NAMEDIFF,#DEF_DIFF,#LIB_DIFF,DIFF_EXPLANATION" + vbCrLf)
+        End If
+
+        'Dim T.libraries As List(Of tmLibrary)=nbew list(Of tmlibrary)
+        T.libraries = T.getLibsSIX
+
+        For Each matchGUID In matchGUIDs
+            Dim C1 As tm6Component = T.guidCOMP6(matchGUID)
+            C1.classDef = T.getTF6CompDef(C1.id)
+            Dim C2 As tm6Component = T2.guidCOMP6(matchGUID)
+            C2.classDef = T2.getTF6CompDef(C2.id)
+
+            If IsNothing(C1.classDef) Then
+                Console.WriteLine("ERROR: Could not retrieve " + C1.name + " [" + C1.id.ToString + "] from " + T.tmFQDN + " - skipping")
+                GoTo skipThisOne
+            End If
+            If IsNothing(C2.classDef) Then
+                Console.WriteLine("ERROR: Could not retrieve " + C2.name + " [" + C2.id.ToString + "] from " + T2.tmFQDN + " - skipping")
+                GoTo skipThisOne
+            End If
+
+            Dim libNDX As Integer = -1
+            libNDX = T.ndxLib(C1.libraryId)
+            Dim l$ = ""
+            If libNDX = -1 Then l = "Invalid Lib" Else l = T.libraries(libNDX).Name
+
+            Dim output$ = qT(l) + "," + qT(C1.name) + "," + C1.id.ToString + "," + C1.componentTypeName + "," + compCompare(C1, C2)
+
+            Console.WriteLine(C1.name + "/" + C2.name)
+            If doCSV = True Then Print(FF, output + vbCrLf)
+skipThisOne:
+        Next
+
+
+
+
+        FileClose(FF)
+    End Sub
+
+    Private Function compCompare(ByRef C1 As tm6Component, ByRef C2 As tm6Component) As String
+        Dim numTH_I1 As Integer = 0
+        Dim numSR_I1 As Integer = 0
+        Dim numDIRSR_I1 As Integer = 0
+        Dim numAT_I1 As Integer = 0
+        Dim maxTH_I1 As Integer = 0
+        Dim maxSR_I1 As Integer = 0
+        Dim numTH_I2 As Integer = 0
+        Dim numSR_I2 As Integer = 0
+        Dim numDIRSR_I2 As Integer = 0
+        Dim numAT_I2 As Integer = 0
+        Dim maxTH_I2 As Integer = 0
+        Dim maxSR_I2 As Integer = 0
+        Dim isMatch As Integer = 0
+        Dim unq_I1 As Integer = 0
+        Dim unq_I2 As Integer = 0
+        Dim idDIFF As Integer = 0 ' ID is different
+        Dim nameDIFF As Integer = 0 'name is different
+        Dim defDIFF As Integer = 0 ' the structure is different
+        Dim libDIFF As Integer = 0 ' matches but library changed
+
+        Dim c$ = ","
+        compCompare = ""
+
+        Dim desc$ = ""
+
+        Dim doC1 As Boolean = False : Dim doC2 As Boolean = False
+
+        If Len(C1.name) Then doC1 = True : If Len(C2.name) Then doC2 = True
+
+        If doC1 Then numTH_I1 = C1.numThreats : If doC2 Then numTH_I2 = C2.numThreats
+        If doC1 Then numSR_I1 = C1.numTL_SR : If doC2 Then numSR_I2 = C2.numTL_SR
+        If doC1 Then numDIRSR_I1 = C1.numDirectSRs : If doC2 Then numDIRSR_I2 = C2.numDirectSRs
+        If doC1 Then numAT_I1 = C1.numATTR : If doC2 Then numTH_I2 = C2.numATTR
+        If doC1 Then maxTH_I1 = C1.maxTH : If doC2 Then maxTH_I2 = C2.maxTH
+        If doC1 Then maxSR_I1 = C1.maxSR : If doC2 Then maxSR_I2 = C2.maxSR
+
+        If C1.guid = C2.guid Then isMatch = 1
+        If doC1 = False Then unq_I2 = 1
+        If doC2 = False Then unq_I1 = 1
+        If C1.id <> C2.id Then
+            idDIFF = 1
+            desc += " ID "
+        End If
+        If C1.name <> C2.name Then
+            nameDIFF = 1
+            desc += " NAME "
+        End If
+        If C1.libraryId <> C2.libraryId Then
+            libDIFF = 1
+            desc += " LIB "
+        End If
+        If numTH_I1 <> numTH_I2 Then
+            desc += " THREATS "
+            defDIFF = 1
+        End If
+        If maxTH_I1 <> maxTH_I2 Then
+            desc += " MAX TH "
+            defDIFF = 1
+        End If
+        If maxSR_I1 <> maxSR_I2 Then
+            desc += " MAX SR "
+            defDIFF = 1
+        End If
+        If numAT_I1 <> numAT_I2 Then
+            desc += " ATTR "
+            defDIFF = 1
+        End If
+
+        compCompare = numTH_I1.ToString + c + numSR_I1.ToString + c + numDIRSR_I1.ToString + c + numAT_I1.ToString + c + maxTH_I1.ToString + c + maxSR_I1.ToString + c
+        compCompare += numTH_I2.ToString + c + numSR_I2.ToString + c + numDIRSR_I2.ToString + c + numAT_I2.ToString + c + maxTH_I2.ToString + c + maxSR_I2.ToString + c
+        compCompare += isMatch.ToString + c + unq_I1.ToString + c + unq_I2.ToString + c + idDIFF.ToString + c + nameDIFF.ToString + c + defDIFF.ToString + c + libDIFF.ToString + c + qT(desc)
+
+    End Function
 
     Private Sub giveHelp()
         Console.WriteLine("USAGE: TMCLI action --param1 param1_value --param2 param2_value" + vbCrLf)

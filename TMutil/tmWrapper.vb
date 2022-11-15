@@ -22,6 +22,12 @@ Public Class TM_Client
     Public lib_SR As List(Of tmProjSecReq)
     Public lib_AT As List(Of tmAttribute)
 
+    Public lib_Comps6 As List(Of tm6Component)
+    Public lib_TH6 As List(Of tm6Threat)
+    Public lib_SR6 As List(Of tm6SecReq)
+    Public lib_AT6 As List(Of tm6Attribute)
+    Public lib_CompStructures As List(Of tm6CompStructure)
+
     Public sysLabels As List(Of tmLabels)
     Public labelS As List(Of tmLabels)
     Public groupS As List(Of tmGroups)
@@ -339,6 +345,15 @@ Public Class TM_Client
 
     End Function
 
+    '  /api/library/libraries
+    Public Function getLibsSIX() As List(Of tmLibrary)
+        getLibsSIX = New List(Of tmLibrary)
+        Dim jsoN$ = getAPIData("/api/library/libraries")
+
+        getLibsSIX = JsonConvert.DeserializeObject(Of List(Of tmLibrary))(jsoN)
+
+    End Function
+
     Public Function getCurrentUser() As currUser
         getCurrentUser = New currUser
         Dim jsoN$ = getAPIData("/api/user/loginuserdetails")
@@ -491,6 +506,102 @@ errorcatch:
 
         getTFComponents = JsonConvert.DeserializeObject(Of List(Of tmComponent))(jsoN)
     End Function
+
+    Public Function getTF6Components() As List(Of tm6Component)
+        getTF6Components = New List(Of tm6Component)
+
+        Dim jBody$ = ""
+        Dim urL$ = "/api/library/getrecords"
+
+        Dim tF6 As tfRequest6 = New tfRequest6
+        With tF6
+            .entityTypeName = "Component"
+            .showHiddenOnly = False
+            .libraryId = 0
+        End With
+        jBody = JsonConvert.SerializeObject(tF6)
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        getTF6Components = JsonConvert.DeserializeObject(Of List(Of tm6Component))(jsoN)
+    End Function
+
+    Public Function getTF6Threats() As List(Of tm6Threat)
+        getTF6Threats = New List(Of tm6Threat)
+
+        Dim jBody$ = ""
+        Dim urL$ = "/api/library/getrecords"
+
+        Dim tF6 As tfRequest6 = New tfRequest6
+        With tF6
+            .entityTypeName = "Threat"
+            .showHiddenOnly = False
+            .libraryId = 0
+        End With
+        jBody = JsonConvert.SerializeObject(tF6)
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        getTF6Threats = JsonConvert.DeserializeObject(Of List(Of tm6Threat))(jsoN)
+    End Function
+
+    Public Function getTF6Requirements() As List(Of tm6SecReq)
+        getTF6Requirements = New List(Of tm6SecReq)
+
+        Dim jBody$ = ""
+        Dim urL$ = "/api/library/getrecords"
+
+        Dim tF6 As tfRequest6 = New tfRequest6
+        With tF6
+            .entityTypeName = "SecurityRequirement"
+            .showHiddenOnly = False
+            .libraryId = 0
+        End With
+        jBody = JsonConvert.SerializeObject(tF6)
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        getTF6Requirements = JsonConvert.DeserializeObject(Of List(Of tm6SecReq))(jsoN)
+    End Function
+
+    Public Function getTF6Attributes() As List(Of tm6Attribute)
+        getTF6Attributes = New List(Of tm6Attribute)
+
+        Dim jBody$ = ""
+        Dim urL$ = "/api/library/getrecords"
+
+        Dim tF6 As tfRequest6 = New tfRequest6
+        With tF6
+            .entityTypeName = "Property"
+            .showHiddenOnly = False
+            .libraryId = 0
+        End With
+        jBody = JsonConvert.SerializeObject(tF6)
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        getTF6Attributes = JsonConvert.DeserializeObject(Of List(Of tm6Attribute))(jsoN)
+    End Function
+
+    Public Function getTF6CompDef(ByVal compID As Long) As tm6CompStructure
+        getTF6CompDef = New tm6CompStructure
+
+        Dim c$ = Chr(34)
+
+        Dim jBody$ = "{" + c + "entityTypeName" + c + ":" + c + "Component" + c + "," + c + "id" + c + ":" + compID.ToString + "}"
+        Dim urL$ = "/api/library/getentityreltionshipsrecords"
+
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        If Mid(jsoN, 1, 6) = "ERROR:" Then
+            getTF6CompDef = Nothing
+            Exit Function
+        End If
+
+        getTF6CompDef = JsonConvert.DeserializeObject(Of tm6CompStructure)(jsoN)
+
+    End Function
+
 
 
     Public Function getTFSecReqs(T As tfRequest) As List(Of tmProjSecReq)
@@ -2479,6 +2590,101 @@ skipThose:
 
     End Function
 
+    ' VERSION 6 NDXs
+    '
+    '
+    '
+
+    Public Function guidTHREAT6(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6Threat ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidTHREAT6 = New tm6Threat
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        If Id = -1 Then
+            For Each P In lib_TH6
+                If P.guid.ToString = GUID Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        Else
+            For Each P In lib_TH6
+                If P.id = Id Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        End If
+
+    End Function
+    Public Function guidCOMP6(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6Component ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidCOMP6 = New tm6Component
+        'had to change this as passing byref from multi-threaded main causing issues
+        If Id = -1 Then
+            For Each P In lib_Comps6
+                If P.guid.ToString = GUID Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        Else
+            For Each P In lib_Comps6
+                If P.id = Id Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        End If
+
+    End Function
+    Public Function guidSR6(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6SecReq ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidSR6 = New tm6SecReq
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        If Id = -1 Then
+            For Each P In lib_SR6
+                If P.guid.ToString = GUID Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        Else
+            For Each P In lib_SR6
+                If P.id = Id Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        End If
+
+
+    End Function
+
+    Public Function guidATTR(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6Attribute ', ByRef alL As List(Of tmComponent)) As Integer
+        'ndxCompbyGUID = -1
+        guidATTR = New tm6Attribute
+        'had to change this as passing byref from multi-threaded main causing issues
+
+        If Id = -1 Then
+            For Each P In lib_AT6
+                If P.guid.ToString = GUID Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        Else
+            For Each P In lib_AT6
+                If P.id = Id Then
+                    Return P
+                    Exit Function
+                End If
+            Next
+        End If
+
+    End Function
+
 
 
     Public Function ndxCompbyName(name$, Optional ByVal typeOnly$ = "") As Integer ', ByRef alL As List(Of tmComponent)) As Integer
@@ -3303,6 +3509,23 @@ Public Class tmLibrary
     Public Version$
     Public IsSystemDepartment As Boolean
 
+    '            "id" 99,
+    '           "name": "Automobile",
+    '            "companyId": 0,
+    '            "guid": "0359a988-f6f7-421a-8a87-e68ab918f79f",
+    '            "sharingType": "Public",
+    '            "readonly": false,
+    '            "isDefault": false,
+    '            "dateCreated": "2022-11-02T17:45:49.123",
+    '            "lastUpdated": "2022-11-02T17:54:00.903",
+    '            "departmentId": 118,
+    '            "departmentName": "Automobile",
+    '            "labels": "",
+    '            "version": "6.0",
+    '            "isSystemDepartment": true
+    '        },
+
+
 End Class
 
 Public Class tmBackendThreats
@@ -3410,6 +3633,170 @@ Public Class tmOptions
         '        Threats = New List(Of tmProjThreat)
     End Sub
 End Class
+
+Public Class tm6Component
+    Public id As Long
+    Public name As String
+    Public description As String
+    Public labels As String
+    Public version As String
+    Public libraryId As Integer
+    Public componentTypeId As Integer
+    Public componentTypeName As String
+    Public guid As String
+    Public isHidden As Boolean
+    Public isReadOnlyLibraryEntity As Boolean
+    Public classDef As tm6CompStructure
+
+    Public Function numDirectSRs() As Integer
+        Return classDef.securityRequirements.Count
+    End Function
+    Public Function numThreats() As Integer
+        Return classDef.threats.Count
+    End Function
+    Public Function numATTR(Optional ByVal localOnly As Boolean = True) As Integer
+        If localOnly = False Then
+            Return classDef.properties.Count
+            Exit Function
+        End If
+        numATTR = 0
+        For Each A In classDef.properties
+            If A.isGlobal = False Then numATTR += 1
+        Next
+    End Function
+    Public Function numTL_SR() As Integer
+        ' includes numDirect and those attached to threats, but not ATTR
+        numTL_SR = 0
+        For Each S In classDef.threats
+            numTL_SR += S.securityRequirements.Count
+        Next
+    End Function
+
+    Public Function maxTH() As Integer
+        maxTH = numThreats()
+        For Each A In classDef.properties
+            If A.isGlobal = True Then GoTo skipProp
+            Dim maxOption As Integer = 0
+            For Each O In A.options
+                If O.threats.Count > maxOption Then maxOption = O.threats.Count
+            Next
+skipProp:
+            maxTH += maxOption
+        Next
+    End Function
+    Public Function maxSR() As Integer
+        maxSR = numTL_SR() + numDirectSRs()
+
+        For Each A In classDef.properties
+            If A.isGlobal = True Then GoTo skipProp
+            Dim maxOption As Integer = 0
+            For Each O In A.options
+                For Each T In O.threats
+                    If T.securityRequirements.Count > maxOption Then maxOption = T.securityRequirements.Count
+                Next
+            Next
+            maxSR += maxOption
+        Next
+skipProp:
+
+    End Function
+End Class
+Public Class tm6SecReq
+    Public id As Long
+    Public name As String
+    Public description As String
+    Public riskId As Integer
+    Public isCompensatingControl As Boolean
+    Public riskName As String
+    Public labels As String
+    Public libraryId As Integer
+    Public guid As String
+    Public isHidden As Boolean
+    Public isReadOnlyLibraryEntity As Boolean
+End Class
+Public Class tm6SecReqShort
+    Public isCompensatingControl As Boolean
+    Public applicableOnComponents As List(Of String)
+    Public id As Long
+    Public name As String
+    Public libraryId As Integer
+    Public isHidden As Boolean
+End Class
+Public Class tm6Threat
+    Public id As Long
+    Public guid As String
+    Public name As String
+    Public description As String
+    Public riskId As Integer
+    Public riskName As String
+    Public libraryId As Integer
+    Public labels As String
+    Public automated As Boolean
+    Public isHidden As Boolean
+    Public isReadOnlyLibraryEntity As Boolean
+End Class
+Public Class tm6ThreatShort
+    Public id As Long
+    Public guid As String
+    Public name As String
+    Public riskId As Integer
+    Public riskName As String
+    Public riskDisplayName As String
+    Public libraryId As Integer
+    Public isHidden As Boolean
+    Public securityRequirements As List(Of tm6SecReqShort)
+End Class
+
+Public Class tm6Attribute
+    Public id As Long
+    Public guid As String
+    Public name As String
+    Public labels As String
+    Public description As String
+    Public libraryId As Integer
+    Public isSelected As Boolean
+    Public isHidden As Boolean
+    Public isOptional As Boolean
+    Public attributeType As String
+    Public propertyTypeId As Integer
+    Public propertyTypeGuid As String
+    Public options As List(Of tm6Options)
+    Public isReadOnlyLibraryEntity As Boolean
+End Class
+
+Public Class tm6Options
+    Public id As Integer
+    Public name As String
+    Public isDefault As Boolean
+    Public guid As String
+    Public propertyId As Integer
+End Class
+Public Class tm6OptionsShort
+    Public id As Integer
+    Public name As String
+    Public isDefault As Boolean
+    Public threats As List(Of tm6ThreatShort)
+End Class
+Public Class tm6AttributesShort
+    Public id As Integer
+    Public guid As String
+    Public name As String
+    Public libraryId As Integer
+    Public isHidden As Boolean
+    Public isOptional As Boolean
+    Public isGlobal As Boolean
+    Public attributeType As String
+    Public propertyTypeId As Integer
+    Public propertyTypeGuid As String
+    Public options As List(Of tm6OptionsShort)
+End Class
+Public Class tm6CompStructure
+    Public comP As tm6Component
+    Public threats As List(Of tm6ThreatShort)
+    Public securityRequirements As List(Of tm6SecReqShort)
+    Public properties As List(Of tm6AttributesShort)
+End Class
+
 Public Class tmComponent
     Public Id As Long
     Public Name$

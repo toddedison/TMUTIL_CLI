@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "remove_user_access --file removeimport.txt --match email"
+      "commandLineArgs": " i2i_compcompare60 --i2 tmrc6.threatmodeler.us --file 20221109_TMDEMO_vs_TMRC6.csv"
     }
   }
 }
