@@ -583,12 +583,15 @@ errorcatch:
         getTF6Attributes = JsonConvert.DeserializeObject(Of List(Of tm6Attribute))(jsoN)
     End Function
 
-    Public Function getTF6CompDef(ByVal compID As Long) As tm6CompStructure
-        getTF6CompDef = New tm6CompStructure
+    Public Function getTF6CompDef(ByRef COMP As tm6Component) As tm6Component
+        getTF6CompDef = COMP
+        Dim compDEF As tm6CompStructure = New tm6CompStructure
 
         Dim c$ = Chr(34)
+        Dim jBody$ = ""
 
-        Dim jBody$ = "{" + c + "entityTypeName" + c + ":" + c + "Component" + c + "," + c + "id" + c + ":" + compID.ToString + "}"
+        jBody$ = "{" + c + "entityTypeName" + c + ":" + c + "Component" + c + "," + c + "id" + c + ":" + COMP.id.ToString + "}"
+
         Dim urL$ = "/api/library/getentityreltionshipsrecords"
 
         Dim jsoN$ = getAPIData(urL, True, jBody$)
@@ -598,8 +601,9 @@ errorcatch:
             Exit Function
         End If
 
-        getTF6CompDef = JsonConvert.DeserializeObject(Of tm6CompStructure)(jsoN)
+        compdef = JsonConvert.DeserializeObject(Of tm6CompStructure)(jsoN)
 
+        COMP.classDef = compDEF
     End Function
 
 
@@ -3671,7 +3675,21 @@ Public Class tm6Component
             numTL_SR += S.securityRequirements.Count
         Next
     End Function
-
+    Public Function unqTL_SR() As Integer
+        unqTL_SR = 0
+        Dim srS As Collection = New Collection
+        For Each S In classDef.threats
+            For Each SR In S.securityRequirements
+                If grpNDX(srS, SR.id) = 0 Then
+                    srS.Add(SR.id)
+                    unqTL_SR += 1
+                    'Else
+                    '    Dim K As Integer = 0
+                    '    K = 1
+                End If
+            Next
+        Next
+    End Function
     Public Function maxTH() As Integer
         maxTH = numThreats()
         For Each A In classDef.properties
@@ -3700,6 +3718,14 @@ skipProp:
 skipProp:
 
     End Function
+    Public Sub New()
+        Me.classDef = New tm6CompStructure
+        With Me.classDef
+            .threats = New List(Of tm6ThreatShort)
+            .securityRequirements = New List(Of tm6SecReqShort)
+            .properties = New List(Of tm6AttributesShort)
+        End With
+    End Sub
 End Class
 Public Class tm6SecReq
     Public id As Long
@@ -3791,10 +3817,23 @@ Public Class tm6AttributesShort
     Public options As List(Of tm6OptionsShort)
 End Class
 Public Class tm6CompStructure
-    Public comP As tm6Component
+    '        "id": 3081,
+    '        "guid": "17626326-f596-4bfd-8744-3aa5ef404c37",
+    '        "name": "5G security firewall",
+    '        "imagePath": "/ComponentImage/images2202006102252443317.png",
+    '        "isHidden": false,
+    '        "libraryId": 94,
+    '        "componentTypeId": 66,
+    '        "componentTypeName": "Security Control"
     Public threats As List(Of tm6ThreatShort)
     Public securityRequirements As List(Of tm6SecReqShort)
     Public properties As List(Of tm6AttributesShort)
+
+    Public Sub New()
+        threats = New List(Of tm6ThreatShort)
+        securityRequirements = New List(Of tm6SecReqShort)
+        properties = New List(Of tm6AttributesShort)
+    End Sub
 End Class
 
 Public Class tmComponent

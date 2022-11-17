@@ -8349,17 +8349,21 @@ skipUserLoop:
         If docsv = True Then
             FF = FreeFile()
             FileOpen(FF, file, OpenMode.Output)
-            Print(FF, "Library,Component,CompID,Comp_Type,#TH_I1,#SR_I1,#DIR_SR_I1,#ATTR_I1,MAX#TH_I1,MAX#SR_I1,#TH_I2,#SR_I2,#DIR_SR_I2,#ATTR_I2,MAX#TH_I2,MAX#SR_I2,#MATCH,#UNQ_I1,#UNQ_I2,#ID_DIFF,#NAMEDIFF,#DEF_DIFF,#LIB_DIFF,DIFF_EXPLANATION" + vbCrLf)
+            Print(FF, "Library,Component,CompID,Comp_Type,#TH_I1,#SR_I1,#DIR_SR_I1,#UNQSR_I1,#ATTR_I1,MAX#TH_I1,MAX#SR_I1,#TH_I2,#SR_I2,#DIR_SR_I2,#UNQSR_I1,#ATTR_I2,MAX#TH_I2,MAX#SR_I2,#MATCH,#UNQ_I1,#UNQ_I2,#ID_DIFF,#NAMEDIFF,#DEF_DIFF,#LIB_DIFF,DIFF_EXPLANATION" + vbCrLf)
         End If
+
+        Console.WriteLine("Library,Component,CompID,Comp_Type,#TH_I1,#SR_I1,#UNQSR_I1,#DIR_SR_I1,#ATTR_I1,MAX#TH_I1,MAX#SR_I1,#TH_I2,#SR_I2,#UNQSR_I2,#DIR_SR_I2,#ATTR_I2,MAX#TH_I2,MAX#SR_I2,#MATCH,#UNQ_I1,#UNQ_I2,#ID_DIFF,#NAMEDIFF,#DEF_DIFF,#LIB_DIFF,DIFF_EXPLANATION")
+        '#TH_I2,#SR_I2,#DIR_SR_I2,#ATTR_I2,MAX#TH_I2,MAX#SR_I2
 
         'Dim T.libraries As List(Of tmLibrary)=nbew list(Of tmlibrary)
         T.libraries = T.getLibsSIX
+        T2.librarieS = T2.getLibsSIX
 
         For Each matchGUID In matchGUIDs
-            Dim C1 As tm6Component = T.guidCOMP6(matchGUID)
-            C1.classDef = T.getTF6CompDef(C1.id)
-            Dim C2 As tm6Component = T2.guidCOMP6(matchGUID)
-            C2.classDef = T2.getTF6CompDef(C2.id)
+            Dim C1 As tm6Component = T.getTF6CompDef(T.guidCOMP6(matchGUID))
+            Dim C2 As tm6Component = T2.getTF6CompDef(T2.guidCOMP6(matchGUID))
+
+            Console.WriteLine("Evaluating " + C1.name + " [" + C1.id.ToString + "] against " + C2.name + " [" + C2.id.ToString + "] - Threats: " + C1.numThreats.ToString + " / " + C2.numThreats.ToString)
 
             If IsNothing(C1.classDef) Then
                 Console.WriteLine("ERROR: Could not retrieve " + C1.name + " [" + C1.id.ToString + "] from " + T.tmFQDN + " - skipping")
@@ -8371,32 +8375,98 @@ skipUserLoop:
             End If
 
             Dim libNDX As Integer = -1
+            Dim libNDX2 As Integer = -1
             libNDX = T.ndxLib(C1.libraryId)
-            Dim l$ = ""
-            If libNDX = -1 Then l = "Invalid Lib" Else l = T.libraries(libNDX).Name
+            libNDX2 = T2.ndxLib(C2.libraryId)
+            Dim l1$ = ""
+            Dim l2$ = ""
+            If libNDX = -1 Then l1 = "Invalid Lib" Else l1 = T.librarieS(libNDX).Name
+            If libNDX2 = -1 Then l2 = "Invalid Lib" Else l2 = T2.librarieS(libNDX).Name
 
-            Dim output$ = qT(l) + "," + qT(C1.name) + "," + C1.id.ToString + "," + C1.componentTypeName + "," + compCompare(C1, C2)
+            Dim output$ = qT(l1) + "," + qT(C1.name) + "," + C1.id.ToString + "," + C1.componentTypeName + "," + compCompare(C1, C2)
 
-            Console.WriteLine(C1.name + "/" + C2.name)
+            'Console.WriteLine(C1.name + "/" + output)
             If doCSV = True Then Print(FF, output + vbCrLf)
 skipThisOne:
         Next
 
 
+        For Each matchGUID In t1GUIDunq
+            Dim C1 As tm6Component = T.getTF6CompDef(T.guidCOMP6(matchGUID))
+            Dim C2 As tm6Component = New tm6Component
+
+            Console.WriteLine("Evaluating " + C1.name + " [" + C1.id.ToString + "] is unique to " + T.tmFQDN) ' " + C2.name + " [" + C2.id.ToString + "] - Threats: " + C1.numThreats.ToString + " / " + C2.numThreats.ToString)
+
+            If IsNothing(C1.classDef) Then
+                Console.WriteLine("ERROR: Could not retrieve " + C1.name + " [" + C1.id.ToString + "] from " + T.tmFQDN + " - skipping")
+                GoTo skipThisOne2
+            End If
+
+            Dim libNDX As Integer = -1
+            libNDX = T.ndxLib(C1.libraryId)
+            Dim l1$ = ""
+            If libNDX = -1 Then l1 = "Invalid Lib" Else l1 = T.librarieS(libNDX).Name
+
+            C2.name = ""
+            Dim output$ = qT(l1) + "," + qT(C1.name) + "," + C1.id.ToString + "," + C1.componentTypeName + "," + compCompare(C1, C2)
+
+            'Console.WriteLine(C1.name + "/" + output)
+            If doCSV = True Then Print(FF, output + vbCrLf)
+skipThisOne2:
+        Next
+
+
+
+        For Each matchGUID In t2GUIDunq
+            Dim C2 As tm6Component = T2.getTF6CompDef(T2.guidCOMP6(matchGUID))
+            Dim C1 As tm6Component = New tm6Component
+
+            Console.WriteLine("Evaluating " + C2.name + " [" + C2.id.ToString + "] is unique to " + T2.tmFQDN)
+
+            If IsNothing(C2.classDef) Then
+                Console.WriteLine("ERROR: Could not retrieve " + C2.name + " [" + C2.id.ToString + "] from " + T2.tmFQDN + " - skipping")
+                GoTo skipThisOne3
+            End If
+
+            Dim libNDX2 As Integer = -1
+            libNDX2 = T2.ndxLib(C2.libraryId)
+            Dim l2$ = ""
+            If libNDX2 = -1 Then l2 = "Invalid Lib" Else l2 = T2.librarieS(libNDX2).Name
+
+            C1.name = ""
+            Dim output$ = qT(l2) + "," + qT(C2.name) + "," + C2.id.ToString + "," + C2.componentTypeName + "," + compCompare(C1, C2)
+
+            'Console.WriteLine(C1.name + "/" + output)
+            If doCSV = True Then Print(FF, output + vbCrLf)
+skipThisOne3:
+        Next
 
 
         FileClose(FF)
     End Sub
 
     Private Function compCompare(ByRef C1 As tm6Component, ByRef C2 As tm6Component) As String
+        If C1.name = "AWS Docker" Or C2.name = "AWS Docker" Then
+            'here is where you can catch unq issue (should be unq to tmrc6/C2)
+            Dim K As Integer
+            K = 1
+        End If
+        If C1.name = "AM - Entertainment System" Or C2.name = "AM - Entertainment System" Then
+            ' here you can catch unq SR issue
+            Dim K As Integer
+            K = 1
+        End If
+
         Dim numTH_I1 As Integer = 0
         Dim numSR_I1 As Integer = 0
+        Dim numUnqSR_I1 As Integer = 0
         Dim numDIRSR_I1 As Integer = 0
         Dim numAT_I1 As Integer = 0
         Dim maxTH_I1 As Integer = 0
         Dim maxSR_I1 As Integer = 0
         Dim numTH_I2 As Integer = 0
         Dim numSR_I2 As Integer = 0
+        Dim numUnqSR_I2 As Integer = 0
         Dim numDIRSR_I2 As Integer = 0
         Dim numAT_I2 As Integer = 0
         Dim maxTH_I2 As Integer = 0
@@ -8416,18 +8486,31 @@ skipThisOne:
 
         Dim doC1 As Boolean = False : Dim doC2 As Boolean = False
 
-        If Len(C1.name) Then doC1 = True : If Len(C2.name) Then doC2 = True
+        If Len(C1.name) Then doC1 = True
+        If Len(C2.name) Then doC2 = True
 
-        If doC1 Then numTH_I1 = C1.numThreats : If doC2 Then numTH_I2 = C2.numThreats
-        If doC1 Then numSR_I1 = C1.numTL_SR : If doC2 Then numSR_I2 = C2.numTL_SR
-        If doC1 Then numDIRSR_I1 = C1.numDirectSRs : If doC2 Then numDIRSR_I2 = C2.numDirectSRs
-        If doC1 Then numAT_I1 = C1.numATTR : If doC2 Then numTH_I2 = C2.numATTR
-        If doC1 Then maxTH_I1 = C1.maxTH : If doC2 Then maxTH_I2 = C2.maxTH
-        If doC1 Then maxSR_I1 = C1.maxSR : If doC2 Then maxSR_I2 = C2.maxSR
+        If doC1 Then numTH_I1 = C1.numThreats
+        If doC2 Then numTH_I2 = C2.numThreats
+        If doC1 Then numSR_I1 = C1.numTL_SR
+        If doC2 Then numSR_I2 = C2.numTL_SR
+        If doC1 Then numDIRSR_I1 = C1.numDirectSRs
+        If doC2 Then numDIRSR_I2 = C2.numDirectSRs
+        If doC1 Then numAT_I1 = C1.numATTR
+        If doC2 Then numAT_I2 = C2.numATTR
+        If doC1 Then maxTH_I1 = C1.maxTH
+        If doC2 Then maxTH_I2 = C2.maxTH
+        If doC1 Then maxSR_I1 = C1.maxSR
+        If doC2 Then maxSR_I2 = C2.maxSR
+        If doC1 Then numUnqSR_I1 = C1.unqTL_SR
+        If doC2 Then numUnqSR_I2 = C2.unqTL_SR
 
         If C1.guid = C2.guid Then isMatch = 1
-        If doC1 = False Then unq_I2 = 1
-        If doC2 = False Then unq_I1 = 1
+        If doC1 = False Then
+            unq_I2 = 1
+        End If
+        If doC2 = False Then
+            unq_I1 = 1
+        End If
         If C1.id <> C2.id Then
             idDIFF = 1
             desc += " ID "
@@ -8457,8 +8540,8 @@ skipThisOne:
             defDIFF = 1
         End If
 
-        compCompare = numTH_I1.ToString + c + numSR_I1.ToString + c + numDIRSR_I1.ToString + c + numAT_I1.ToString + c + maxTH_I1.ToString + c + maxSR_I1.ToString + c
-        compCompare += numTH_I2.ToString + c + numSR_I2.ToString + c + numDIRSR_I2.ToString + c + numAT_I2.ToString + c + maxTH_I2.ToString + c + maxSR_I2.ToString + c
+        compCompare = numTH_I1.ToString + c + numSR_I1.ToString + c + numDIRSR_I1.ToString + c + numUnqSR_I1.ToString + c + numAT_I1.ToString + c + maxTH_I1.ToString + c + maxSR_I1.ToString + c
+        compCompare += numTH_I2.ToString + c + numSR_I2.ToString + c + numDIRSR_I2.ToString + c + numUnqSR_I2.ToString + c + numAT_I2.ToString + c + maxTH_I2.ToString + c + maxSR_I2.ToString + c
         compCompare += isMatch.ToString + c + unq_I1.ToString + c + unq_I2.ToString + c + idDIFF.ToString + c + nameDIFF.ToString + c + defDIFF.ToString + c + libDIFF.ToString + c + qT(desc)
 
     End Function
