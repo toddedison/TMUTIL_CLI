@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": " i2i_compcompare60 --i2 tmrc6.threatmodeler.us --file 20221109_TMDEMO_vs_TMRC6.csv"
+      "commandLineArgs": "activity_report"
     }
   }
 }

@@ -54,16 +54,24 @@ Public Class TM_Client
             Me.isConnected = True
             uCheck = getCurrentUser()
 
-            If uCheck.email = "" Then
+            Dim probError As Boolean = False
+
+            If IsNothing(uCheck) = True Then
+                probError = True
+            Else
+                If uCheck.email = "" Then probError = True
+            End If
+
+            If probError = True Then
                 Me.isConnected = False
                 Console.WriteLine("Unable to access with API KEY - are you sure " + fqdN + " is running 6.0?")
                 Exit Sub
+            Else
+                Me.isConnected = True
+                Console.WriteLine("Connecting as " + uCheck.userName + " to " + fqdN)
+                Exit Sub
             End If
-            Me.isConnected = True
-            Console.WriteLine("Connecting as " + uCheck.userName + " to " + fqdN)
-            Exit Sub
         End If
-
         'Console.WriteLine("New TM_Client activated: " + Replace(tmFQDN, "https://", ""))
 
         Console.WriteLine("Connecting to " + fqdN)
@@ -262,7 +270,15 @@ Public Class TM_Client
 
         Dim dStr$ = "Data"
         If isTMsix Then dStr = "data"
-        Return O.SelectToken(dStr).ToString
+        If IsNothing(O.SelectToken(dStr)) = True Then
+            If IsNothing(O.SelectToken(isSuccessStr)) = True Then
+                Return ""
+            Else
+                Return O.SelectToken(isSuccessStr).ToString
+            End If
+        Else
+            Return O.SelectToken(dStr).ToString
+        End If
     End Function
 
     Public Function getMatildaDiscover(fileN$) As matildaApp
@@ -399,6 +415,29 @@ errorcatch:
 
     End Function
 
+    Public Function getAllProjects6() As List(Of tmProjInfoShort6)
+        getAllProjects6 = New List(Of tmProjInfoShort6)
+
+        Dim bodY$ = "{" + qT("pageNumber") + ": 1," + qT("pageLimit") + ": 1000}"
+        Dim jsoN$ = getAPIData("/api/project/projects", True, bodY) '/smartfilter", True, bodY)
+
+        'Dim O As JObject = JObject.Parse(jsoN)
+        'jsoN = O.SelectToken("data").ToString
+
+
+        getAllProjects6 = JsonConvert.DeserializeObject(Of List(Of tmProjInfoShort6))(jsoN)
+
+    End Function
+
+    Public Function getProjActivity(projGuid$, Optional ByVal fromDate As DateTime = #1/1/2022#) As List(Of tmProjActivity6)
+        getProjActivity = New List(Of tmProjActivity6)
+
+        Dim datelimit$ = ""
+        If fromDate <> #1/1/2022# Then datelimit = "?actionDateFrom=" + fromDate.ToString
+        Dim jsoN$ = getAPIData("/api/project/" + projGuid + "/getalltransactionlogevent/1/0" + datelimit) '?actionDateFrom=2022-01-01")
+
+        getProjActivity = JsonConvert.DeserializeObject(Of List(Of tmProjActivity6))(jsoN)
+    End Function
     Public Function getPermissionsOfModel(projID As Long) As tm_userGroupPermissions
         getPermissionsOfModel = New tm_userGroupPermissions
 
@@ -429,7 +468,12 @@ errorcatch:
 
     Public Function getLabels(Optional ByVal isSystem As Boolean = False) As List(Of tmLabels)
         getLabels = New List(Of tmLabels)
-        Dim jsoN$ = getAPIData("/api/labels?isSystem=" + LCase(CStr(isSystem))) 'true") '?isSystem=false")
+        Dim jsoN$ = ""
+        If isTMsix = False Then
+            jsoN = getAPIData("/api/labels?isSystem=" + LCase(CStr(isSystem))) 'true") '?isSystem=false")
+        Else
+            jsoN = getAPIData("/api/library/labels") 'true") '?isSystem=false")
+        End If
 
         getLabels = JsonConvert.DeserializeObject(Of List(Of tmLabels))(jsoN)
     End Function
@@ -598,6 +642,7 @@ errorcatch:
 
         If Mid(jsoN, 1, 6) = "ERROR:" Then
             getTF6CompDef = Nothing
+            Console.WriteLine("ERROR: " + jsoN)
             Exit Function
         End If
 
@@ -827,6 +872,20 @@ errorcatch:
         Next
 
     End Function
+    Public Function ndxUser(userID As Integer, listOfUsers As List(Of tmUser)) As Integer
+        ndxUser = -1
+
+        Dim ndX = 0
+
+        For Each L In listOfUsers
+            If L.Id = userID Then
+                ndxUser = ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+    End Function
 
 
 
@@ -875,9 +934,18 @@ errorcatch:
         '"Type":"AWSCloudApplication",
         '"CreatedThrough":"Blank","UserPermissions":[],
         '"GroupPermissions":[]}
+
+        If importType = "Kis" Then
+            If isTMsix = True Then importType = "kis"
+        End If
+
+
+        If isTMsix Then GoTo is6
+
         Dim newM As kisCreateModel_setProject = New kisCreateModel_setProject
 
         createKISSmodelForImport = ""
+
 
         With newM
             .Id = 0
@@ -893,18 +961,46 @@ errorcatch:
 
         Dim jBody$ = JsonConvert.SerializeObject(newM)
         Dim jSon$ = getAPIData("/api/project/create", True, jBody)
-
-
-
         Return jSon
+        Exit Function
+
+is6:
+
+        Dim newM6 As kisCreateModel60_setProject = New kisCreateModel60_setProject
+
+        createKISSmodelForImport = ""
+
+        With newM6
+            .Id = 0
+            .Name = modelName
+            .RiskId = riskId
+            .Version = versioN.ToString
+            .Labels = labelS
+            .Type = modelType
+            '.CreatedThrough = "Blank"
+            .UserPermissions = New List(Of String)
+            .GroupPermissions = New List(Of String)
+            .IsValidFile = False
+            .isImportant = False
+            .IsInternal = True
+        End With
+
+        Dim jBody6$ = JsonConvert.SerializeObject(newM6)
+        Dim jSon6$ = getAPIData("/api/project/create", True, jBody6)
+
+
+
+        Return jSon6
     End Function
 
-    Public Function importKISSmodel(fileN$, projNum As Integer, Optional ByVal integrationType$ = "Kis") As String
+    Public Function importKISSmodel(fileN$, ByVal projNum$, Optional ByVal integrationType$ = "Kis") As String
         importKISSmodel = ""
 
+        If integrationType = "Kis" Then
+            If isTMsix = True Then integrationType = "kis"
+        End If
 
-
-        Dim jSon$ = getAPIData("/api/import/" + projNum.ToString + "/" + integrationType, True,,, fileN)
+        Dim jSon$ = getAPIData("/api/import/" + projNum + "/" + integrationType, True,,, fileN)
 
         '    Dim stopHere As Integer = 1
 
@@ -2149,6 +2245,44 @@ skipTheLoad:
 
     End Function
 
+    Public Class kisCreateModel60_setProject
+        '      {
+        '"Id": 0,
+        '"Name": "Pratibha KisImport via API",
+        '"RiskId": 3,
+        '"Labels": null,
+        '"Version": "1",
+        '"IsValidFile": false,
+        '"Type": "AWS Cloud Application",
+        '"IsInternal": true,
+        '"UserPermissions": [
+        '  
+        '],
+        '"GroupPermissions": [
+        '  
+        '],
+        '"Description": "",
+        '"isImportant": false
+        '}
+
+
+        Public Id As Integer
+        Public Name As String
+        Public RiskId As Integer
+        Public Labels As String
+        Public Version As String
+        Public IsValidFile As Boolean
+        Public [Type] As String
+        Public IsInternal As Boolean
+        Public UserPermissions As List(Of String)
+        Public GroupPermissions As List(Of String)
+        Public Description As String
+        Public isImportant As Boolean
+        Public Sub New()
+            UserPermissions = New List(Of String)
+            GroupPermissions = New List(Of String)
+        End Sub
+    End Class
     Public Class kisCreateModel_setProject
         '{"Id":0,
         '"Name""test_meth_inst2",
@@ -2515,8 +2649,21 @@ skipThose:
         'had to change this as passing byref from multi-threaded main causing issues
 
         Dim ndX As Integer = 0
+
+        If isTMsix = True Then GoTo tm6
+
         For Each P In lib_Comps
             If P.Id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+        Exit Function
+
+tm6:
+        For Each P In lib_Comps6
+            If P.id = ID Then
                 Return ndX
                 Exit Function
             End If
@@ -2642,6 +2789,8 @@ skipThose:
         End If
 
     End Function
+
+
     Public Function guidSR6(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6SecReq ', ByRef alL As List(Of tmComponent)) As Integer
         'ndxCompbyGUID = -1
         guidSR6 = New tm6SecReq
@@ -2666,9 +2815,9 @@ skipThose:
 
     End Function
 
-    Public Function guidATTR(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6Attribute ', ByRef alL As List(Of tmComponent)) As Integer
+    Public Function guidATTR6(Optional ByVal GUID$ = "", Optional ByVal Id As Integer = -1) As tm6Attribute ', ByRef alL As List(Of tmComponent)) As Integer
         'ndxCompbyGUID = -1
-        guidATTR = New tm6Attribute
+        guidATTR6 = New tm6Attribute
         'had to change this as passing byref from multi-threaded main causing issues
 
         If Id = -1 Then
@@ -2697,11 +2846,11 @@ skipThose:
         'had to change this as passing byref from multi-threaded main causing issues
 
         Dim ndX As Integer = 0
+
+        If isTMsix Then GoTo tm6
+
         For Each P In lib_Comps
-            If LCase(P.Name) = "Developers" Then
-                Dim K As Integer
-                K = 1
-            End If
+
             If LCase(P.Name) = LCase(name) Then
                 If Len(typeOnly) Then
                     If LCase(P.ComponentTypeName) <> LCase(typeOnly) Then GoTo nextInList
@@ -2710,6 +2859,22 @@ skipThose:
                 Exit Function
             End If
 nextInList:
+            ndX += 1
+        Next
+
+        Exit Function
+
+tm6:
+        For Each P In lib_Comps6
+
+            If LCase(P.name) = LCase(name) Then
+                If Len(typeOnly) Then
+                    If LCase(P.componentTypeName) <> LCase(typeOnly) Then GoTo nextInList2
+                End If
+                Return ndX
+                Exit Function
+            End If
+nextInList2:
             ndX += 1
         Next
 
@@ -3345,6 +3510,89 @@ Public Class tmLabels
     Public Attributes$
 End Class
 
+Public Class tmProjActivity6
+    '  "projectId": 2090,
+    '   "projectName": "WebAppAWS",
+    '   "userId": 273,
+    '   "userName": "Mike",
+    '   "transactionName": "ProjectThreatStatusUpdate",
+    '   "description": "Accessing Functionality Not Properly Constrained by ACLs Threat on API 2 Status Change : Open to Partially Mitigated",
+    '   "notes": "ProjectThreat",
+    '   "actionTime": "2022-12-01T00:03:38.473",
+    '   "diagramObjectType": "Node",
+    '   "source": "API 2",
+    '   "sourceId": 23086,
+    '   "innerModels": [
+    ''  name
+    '
+
+    Public projectId As Integer
+    Public projectName$
+    Public userId As Integer
+    Public userName$
+    Public transactionName$
+    Public description$
+    Public notes$
+    Public actionTime As DateTime
+    Public diagramObjectType$
+    Public source$
+    Public sourceId$
+    Public innerModels As List(Of tmInnerModel6)
+
+    Public Sub New()
+        innerModels = New List(Of tmInnerModel6)
+    End Sub
+End Class
+
+
+Public Class tmInnerModel6
+    Public id As Integer
+    Public name As String
+End Class
+Public Class tmProjInfoShort6
+    '       "name": "Test-Yash-1",
+    '            "id" 2069,
+    '            "isImportant": false,
+    '            "description": "",
+    '            "version": "1",
+    '            "archived": false,
+    '            "createDate": "2022-11-17T18:42:39.027",
+    '            "createdById": 1,
+    '            "riskId": 3,
+    '            "riskName": "Medium",
+    ''            "riskColor": "#fbbc05",
+    '            "lastModifiedById": 1,
+    '            "lastModifiedDate": "2022-11-17T18:42:53.557",
+    '            "lastModifiedByName": "Corporate Admin",
+    '            "createdByName": "Corporate Admin",
+    '            "departmentName": "Corporate",
+    '            "departmentId": 1,
+    '            "guid": "19599980-52fe-4eee-9adf-33f03723febf",
+    '            "type": "AWSCloudApplication",
+    '            "permission": 2
+    Public id As Long
+    Public name$
+    Public version$
+    Public guid$ ' As System.Guid
+    Public description$
+    Public isImportant As Boolean
+    Public archived As Boolean
+    Public labels As String
+    Public createDate As DateTime
+    Public createdById As Integer
+    Public riskId As Integer
+    Public riskName$
+    Public lastModifiedByName$
+    Public lastModifiedById As Integer 'Name$
+    Public LastModifiedDate As DateTime
+    'Public RiskName As Integer
+    Public [type] As String
+    Public createdByName$
+    Public departmentName$
+    Public departmentId As Integer
+    Public permission As Integer
+
+End Class
 Public Class tmProjInfo
     Public Id As Long
     Public Name$

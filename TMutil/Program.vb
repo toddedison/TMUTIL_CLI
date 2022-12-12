@@ -431,6 +431,10 @@ doneLoop:
                     End
                 End If
 
+                If T.isTMsix Then
+                    Call csv2Model(modelName$, fileN$)
+                    End
+                End If
                 Dim R As New tfRequest
 
                 With R
@@ -464,7 +468,7 @@ doneLoop:
                 End If
                 Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
 
-                Dim resP$ = T.importKISSmodel(fileN, modelNum)
+                Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
                 If Mid(resP, 1, 5) = "ERROR" Then
                     Console.WriteLine(resP)
                 Else
@@ -520,7 +524,7 @@ doneLoop:
                     Console.WriteLine("file does not exist " + fileN)
                 End If
 
-                Dim resP$ = T.importKISSmodel(fileN, modelNum)
+                Dim resP$ = T.importKISSmodel(fileN, modelNum.tostring)
                 If Mid(resP, 1, 5) = "ERROR" Then
                     Console.WriteLine(resP)
                 Else
@@ -548,7 +552,7 @@ doneLoop:
                     Console.WriteLine("file does not exist " + fileN)
                 End If
 
-                Dim resP$ = T.importKISSmodel(fileN, modelNum, "CloudFormation")
+                Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString, "CloudFormation")
                 If Mid(resP, 1, 5) = "ERROR" Then
                     Console.WriteLine(resP)
                 Else
@@ -658,7 +662,7 @@ doneLoop:
 
                 Console.WriteLine(vbCrLf + "Submitting JSON for import into Project #" + modelNum.ToString)
 
-                Dim resP$ = T.importKISSmodel(resulT1, modelNum)
+                Dim resP$ = T.importKISSmodel(resulT1, modelNum.ToString)
                 If Mid(resP, 1, 5) = "ERROR" Then
                     Console.WriteLine(resP)
                 Else
@@ -816,10 +820,6 @@ doneHere:
                 Dim LL As List(Of tmLabels)
                 Dim isS As Boolean = False
                 Console.WriteLine("ARG:" + argValue("issystem", args))
-                If argValue("issystem", args) = "" Then
-                    Console.WriteLine("ERROR: Must include IsSystem boolean.. eg get_labels --isSystem false")
-                    End
-                End If
                 If LCase(argValue("issystem", args)) = "true" Then isS = True Else isS = False
                 LL = T.getLabels(isS)
 
@@ -852,7 +852,7 @@ doneHere:
                     Dim a$ = "System:"
                     If L.IsSystem = True Then a += "True" Else a += "False"
                     Console.WriteLine(fLine("Id:" + L.Id.ToString + " " + a, L.Name))
-                    If doCSV Then Print(FF, L.Id.ToString + "," + qq + L.Name + qq + vbCrLf)
+                    If doCSV Then Print(FF, L.Id.ToString + "," + a + "," + qq + L.Name + qq + vbCrLf)
 skipMeLabel:
 
                 Next
@@ -1116,6 +1116,14 @@ skipSR:
                 Call usageReport(fileN, numDays, fD)
                 End
 
+            Case "platform_usage6"
+                Dim fileN$ = argValue("file", args)
+                Dim numDays As Integer = 3
+                If Len(argValue("days", args)) Then numDays = Val(argValue("days", args))
+                Dim fD As Boolean = False
+                If LCase(argValue("detail", args)) = "true" Then fD = True
+                Call usageReport6(fileN, numDays, fD)
+                End
 
             Case "get_users"
                 If T.isTMsix = True Then
@@ -1196,6 +1204,11 @@ skipDEPT1:
                 End
 
             Case "get_projects"
+                If T.isTMsix = True Then
+                    Call getProj6(args)
+                    End
+                End If
+
                 Dim PP As List(Of tmProjInfo)
                 PP = T.getAllProjects()
 
@@ -1234,6 +1247,9 @@ skipCSV:
                 End If
                 End
 
+            Case "clean_entity_labels"
+                Call cleanLabels60(args)
+                End
 
             Case "show_aws_iam"
                 Dim awsACC As List(Of tmAWSacc)
@@ -3206,7 +3222,7 @@ nextTMP:
                     Dim numErrors As Integer = 0
 
                     For Each N In nIds
-                        Dim C1 As tmComponent
+                        Dim C1 As tm6Component
 
                         Dim ndxC1 As Integer = 0
                         ndxC1 = T.ndxComp(Val(N))
@@ -3215,10 +3231,10 @@ nextTMP:
                             Dim compLookingFor$ = Replace(jsonGetNear(tS.json, "NodeId" + Chr(34) + ":" + N, "Name"), Chr(34), "")
                             Console.WriteLine("Unable to find NodeId=" + N + " (NAME=" + compLookingFor + ")")
 
-                            Dim suggesT As tmComponent = New tmComponent
+                            Dim suggesT As tm6Component = New tm6Component
                             Dim suggestNDX As Integer = T.ndxCompbyName(compLookingFor)
                             If suggestNDX <> -1 Then
-                                suggesT = T.lib_Comps(T.ndxCompbyName(compLookingFor))
+                                suggesT = T.lib_Comps6(T.ndxCompbyName(compLookingFor))
                                 'Console.WriteLine("FOUND MATCH: " + suggesT.Name + " [" + suggesT.Id.ToString + "]")
                                 numNodeFixes += 1
                             Else
@@ -3238,7 +3254,7 @@ nextTMP:
                             GoTo nextNID2
                         End If
 
-                        C1 = T.lib_Comps(ndxC1)
+                        C1 = T.lib_Comps6(ndxC1)
 
 
 nextNID2:
@@ -4371,6 +4387,19 @@ nextItem3:
 
                 End
 
+            Case "find_bad_dups"
+                Call findDupThreatsAndATTROptions()
+                End
+
+            Case "find_dup_opts"
+                Call finddupOptions
+                End
+
+            Case "activity_report"
+                Call activityRpt(args)
+                End
+
+
             Case "i2i_comp_compare"
                 If T.isTMsix Then
                     Call i2i_AllCompCompare60(args)
@@ -4778,6 +4807,126 @@ nextItem3:
 
 
     End Function
+
+    Private Sub activityRpt(args() As String)
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6
+
+        Dim allU As List(Of tmUser) = New List(Of tmUser)
+        allU = T.getUsersSIX
+
+        Dim allActivities As List(Of tmProjActivity6) = New List(Of tmProjActivity6)
+
+        For Each proJ In PP
+            Dim pAct As List(Of tmProjActivity6) = T.getProjActivity(proJ.guid)
+            Console.WriteLine("Proj: " + proJ.name + "   # Activities: " + pAct.Count.ToString)
+            For Each A In pAct
+                allActivities.Add(A)
+            Next
+        Next
+
+        Dim unqEvent As Collection = New Collection
+
+        Console.WriteLine("Total # of Activities: " + allActivities.Count.ToString)
+
+        Dim newRpt As customRPT = New customRPT
+        Dim rAR As reportingArgs = New reportingArgs
+
+        '        Public projectId As Integer
+        '        Public projectName$
+        '        Public userId As Integer
+        '        Public userName$
+        '        Public transactionName$
+        '        Public description$
+        '        Public notes$
+        '        Public actionTime As DateTime
+        '        Public diagramObjectType$
+        '        Public source$
+        '        Public sourceId$
+
+        rAR.someColl = New Collection
+        With rAR.someColl
+            .Add("DateTime")
+            .Add("Project")
+            .Add("Username")
+            .Add("UserEmail")
+            .Add("Transaction")
+            .Add("Description")
+        End With
+
+        Dim xls3d(allActivities.Count - 1, 6) As Object
+
+        Dim roW As Long = 0
+        For Each aA In allActivities
+            xls3d(roW, 0) = aA.actionTime
+            xls3d(roW, 1) = aA.projectName + " [" + aA.projectId.ToString + "]"
+            xls3d(roW, 2) = aA.userName
+            Dim uE$ = ""
+            Dim ndxU As Integer = T.ndxUser(aA.userId, allU)
+            If ndxU <> -1 Then
+                uE = allU(ndxU).Email
+            Else
+                uE = "Not Found"
+            End If
+            xls3d(roW, 3) = uE
+            xls3d(roW, 4) = aA.transactionName
+            xls3d(roW, 5) = aA.description
+            roW += 1
+            If grpNDX(unqEvent, aA.transactionName) = 0 Then
+                unqEvent.Add(aA.transactionName)
+                ' Console.WriteLine(aA.transactionName)
+            End If
+        Next
+
+        Console.WriteLine("Throwing object of " + (allActivities.Count * 6).ToString + " elements at Excel..")
+        rAR.booL1 = True ' create XLS not CSV
+
+        Call newRpt.dump2XLS(xls3d, allActivities.Count, rAR)
+
+        End
+    End Sub
+
+    Private Sub getProj6(args() As String)
+
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6()
+
+        Dim doCSV As Boolean = False
+        Dim fileN$ = ""
+
+        If Len(argValue("file", args)) Then
+            doCSV = True
+            fileN = argValue("file", args)
+            safeKILL(fileN)
+            Console.WriteLine("Writing CSV file -> " + fileN)
+
+        End If
+        Dim c$ = Chr(34)
+
+        Dim FF As Integer
+
+        If doCSV Then
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Project Name,Id,Version,Create Date,Created By,Last Modified Date,Last Modified By,Labels" + vbCrLf)
+        End If
+
+        For Each P In PP
+            Console.WriteLine(col5CLI(P.Name + " [" + P.Id.ToString + "]", P.Type, P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+            If doCSV = False Then GoTo skipCSV
+            With P
+                Print(FF, c$ + .Name + c$ + "," + .Id.ToString + "," + c$ + .Version + c$ + "," + c$ + .CreateDate.ToShortDateString + c$ + "," + c$ + .CreatedByName + c$ + "," + c$ + .LastModifiedDate.ToShortDateString + c$ + "," + c$ + .LastModifiedByName + c$ + "," + c$ + .Labels + c$ + vbCrLf)
+            End With
+skipCSV:
+        Next
+
+        If doCSV = True Then
+            FileClose(FF)
+        End If
+        End
+
+    End Sub
 
     Private Sub compCompare(C1 As tmComponent, C2 As tmComponent, Optional ByVal showSR As Boolean = True, Optional ByVal showDIFF As Boolean = False, Optional ByVal shareONLY As Boolean = False, Optional ByVal alreadyLoaded As Boolean = False)
         tf_components = New List(Of tmComponent)
@@ -6815,7 +6964,7 @@ skipDEPT2:
         End If
         Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
 
-        Dim resP$ = T.importKISSmodel(fileN, modelNum)
+        Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
         If Mid(resP, 1, 5) = "ERROR" Then
             Console.WriteLine(resP)
         Else
@@ -7068,7 +7217,7 @@ skipDEPT2:
         End If
         Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
 
-        Dim resP$ = T.importKISSmodel(fileN, modelNum)
+        Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
         If Mid(resP, 1, 5) = "ERROR" Then
             Console.WriteLine("ERROR: Could not create - problem likely due to JSON > Check the Outbound mappings")
         Else
@@ -7077,6 +7226,7 @@ skipDEPT2:
         End
 
     End Sub
+
 
     Public Sub usageReport(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
         Dim doCSV As Boolean = False
@@ -7920,6 +8070,68 @@ skipHeader:
         Return myJsonObjects
 
     End Function
+    Private Function csv2JSON60(csvFile$) As List(Of appScan.makeTMJson.tmObject)
+        csv2JSON60 = New List(Of appScan.makeTMJson.tmObject)
+        'ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes
+
+        Dim myJsonObjects As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+
+        If Dir(csvFile) = "" Then Exit Function
+
+
+
+        Dim linesOfCSV As New Collection
+        linesOfCSV = CSVFiletoCOLL(csvFile)
+
+        For Each C In linesOfCSV
+            If InStr(C, "ObjectId,ObjectName,") <> 0 Then GoTo skipHeader
+
+            Dim findCompNdx As Integer
+            findCompNdx = T.ndxCompbyName(csvObject(C, 1))
+
+            If findCompNdx = -1 Then
+                Console.WriteLine("Cannot find object '" + csvObject(C, 1) + "' - skipping")
+                GoTo skipHeader
+            End If
+
+            Dim newJS As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+            With newJS
+                .Name = csvObject(C, 2)
+                .ComponentGuid = T.lib_Comps6(findCompNdx).guid.ToString
+                .ObjectId = Val(csvObject(C, 0))
+                .ObjectType = csvObject(C, 3)
+                .ParentGroupId = Val(csvObject(C, 4))
+                .Notes = csvObject(C, 7)
+
+                Dim pNum As Integer = 0
+                Dim outboundIds$ = csvObject(C, 5)
+                If Len(outboundIds) Then
+                    For Each outBid In CSVtoCOLL(outboundIds)
+                        'pNum += 1
+                        .OutBoundId.Add(Val(outBid))
+                    Next
+                End If
+
+                If Len(outboundIds) Then
+                    For Each outProt In CSVtoCOLL(csvObject(C, 6))
+                        Dim protID As Integer
+                        protID = T.ndxCompbyName(outProt, "Protocols")
+                        If protID = -1 Or outProt = "" Then
+                            .OutBoundGuids.Add("")
+                        Else
+                            .OutBoundGuids.Add(T.lib_Comps6(protID).guid.ToString)
+                        End If
+                    Next
+                End If
+            End With
+            myJsonObjects.Add(newJS)
+skipHeader:
+        Next
+
+        Return myJsonObjects
+
+    End Function
+
     Private Function findLocalMatch(cID As Integer, cNAME$) As tmComponent
         Dim ndxC As Integer = 0
         findLocalMatch = New tmComponent
@@ -8278,6 +8490,577 @@ skipUserLoop:
     ' ---------------------------------------------------------------------------------------------
 
 
+    Public Sub usageReport6(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
+        Dim doCSV As Boolean = False
+
+        If Len(fileN) Then
+            safeKILL(fileN)
+            doCSV = True
+        End If
+
+
+
+
+
+        Exit Sub
+
+        'orig function below
+        '
+
+        Dim allDepts As List(Of tmDept) = New List(Of tmDept)
+        allDepts = T.getDepartments()
+        Dim allUsers As List(Of tmUser) = New List(Of tmUser)
+        Dim actualDays As Integer = 0
+        Dim biggestDiagram As Integer = 0 '# of nodes
+        Dim mostDiagrams As Integer = 0 '# of diagrams
+        Dim bigDia$ = ""
+        Dim bigDiaAuthor$ = ""
+        'Dim mostDia$ = ""
+        Dim mostDiaAuthor$ = ""
+        'Dim mostDiaNum As Integer = 0
+        Dim numModelsCreated As Integer = 0
+        Dim numModelsModified As Integer = 0
+        Dim numUsersNoLogin As Integer = 0
+
+        '        Read TM audit logs for specific model actions
+        'Go through Last Logins
+        'Go through all Notes on SRs/Threats
+        '# Models created
+        '# Models modified'''''' from TM audit log
+        '        Workflow activity
+        Dim numLogins As Integer = 0
+
+        Dim dAuthors As Collection = New Collection
+        Dim dNumDiag(1999) As Integer
+
+        'Dim numNotes As Integer = 0     'notes require GET for every threat/sr obj - too $
+        Dim numTasks As Integer = 0
+        Dim numWorkflow As Integer = 0
+        Dim numCompletedTasks As Integer = 0
+        Dim allUsernames As Collection = New Collection
+
+        For Each D In allDepts
+            allUsers = T.getUsers(D.Id)
+            For Each P In allUsers
+                If P.DepartmentId <> D.Id Then GoTo skipUser1
+
+                allUsernames.Add(P.Name)
+
+                Dim LLI$ = ""
+                If IsNothing(P.LastLogin) = False Then
+                    LLI = CDate(P.LastLogin).ToShortDateString
+                End If
+
+                If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+                If numDays >= actualDays Then
+                    'Console.WriteLine(P.Name)
+                    If Len(LLI) > 0 Then numLogins += 1
+                End If
+
+                If LLI = "" Then
+                    LLI = "NEVER"
+                    numUsersNoLogin += 1
+                End If
+
+                If fullDetail = True Then Console.WriteLine("         Last Login: " + P.Name + spaces(40 - Len(P.Name)) + ": " + LLI)
+
+skipUser1:
+            Next
+        Next
+
+
+
+        Console.WriteLine("Activity Report within past " + numDays.ToString + " days:" + vbCrLf)
+        Console.WriteLine("# of User Logins:           " + numLogins.ToString)
+        Console.WriteLine("# of Users with NO Logins:  " + numUsersNoLogin.ToString)
+
+        'Console.WriteLine("# of Models Created:        " + numModelsCreated.ToString)
+
+        Dim PP As List(Of tmProjInfo)
+        PP = T.getAllProjects()
+
+        Dim theModel As tmModel = New tmModel
+
+        For Each P In PP
+
+            Dim LLI$ = ""
+            LLI = "" : actualDays = 0
+
+            If IsNothing(P.CreateDate) = False Then
+                LLI = CDate(P.CreateDate).ToShortDateString
+            End If
+
+            If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+            Dim withinScope As Boolean = False
+
+            If numDays >= actualDays Then
+                'Console.WriteLine(P.Name)
+                numModelsCreated += 1
+                If grpNDX(dAuthors, P.CreatedByName) = 0 Then
+                    dAuthors.Add(P.CreatedByName)
+                End If
+                dNumDiag(grpNDX(dAuthors, P.CreatedByName) - 1) += 1
+                withinScope = True
+            End If
+
+            LLI = "" : actualDays = 0
+            If IsNothing(P.LastModifiedDate) = False Then
+                LLI = CDate(P.LastModifiedDate).ToShortDateString
+            End If
+
+            If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+            If numDays >= actualDays Then
+                'Console.WriteLine(P.Name)
+                numModelsModified += 1
+                withinScope = True
+            End If
+
+            If withinScope = False Then
+                GoTo notThisModel
+            End If
+
+
+            If fullDetail = False Then Console.WriteLine("Reading Model: " + P.Name)
+
+            theModel = T.getProject(P.Id)
+            With theModel
+                If fullDetail Then Console.WriteLine("         Model Name: " + P.Name + " Author: " + P.CreatedByName + " # Components: " + .Nodes.Count.ToString)
+                If .Nodes.Count > biggestDiagram Then
+                    biggestDiagram = .Nodes.Count
+                    bigDia = P.Name
+                    bigDiaAuthor = P.CreatedByName
+                End If
+
+            End With
+
+            Dim wfEvents As List(Of tmWorkflowEvent)
+            wfEvents = T.getWorkflowEvents(P.Id)
+
+            For Each wF In wfEvents
+                LLI = "" : actualDays = 0
+                If IsNothing(wF.DateTime) = False Then
+                    LLI = CDate(wF.DateTime).ToShortDateString
+                End If
+
+                If Len(LLI) Then actualDays = DateDiff("d", CDate(LLI), CDate(Today))
+
+                If numDays >= actualDays Then
+                    'Console.WriteLine(P.Name)
+                    numWorkflow += 1
+                End If
+            Next
+
+            If fullDetail = True Then
+                For Each wF In wfEvents
+                    Console.WriteLine("         " + wF.Notes + " by " + wF.UserName)
+                Next
+            End If
+
+            GoTo skipTasks ' tasks have to be inspected individually for relevant details
+
+            Dim projTasks As List(Of tmTask)
+            projTasks = T.getTasks(P.Id)
+
+            For Each pT In projTasks
+                If pT.isByUser = True Then
+                    numTasks += 1
+                    If fullDetail = True Then Console.WriteLine("          Create Task: " + pT.Name)
+                Else
+                    If pT.IsCompleted = True Then
+                        numCompletedTasks += 1
+                        If fullDetail = True Then Console.WriteLine("          Complete Task: " + pT.Name)
+                    End If
+                End If
+            Next
+
+skipTasks:
+
+            If fullDetail = False Then
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+                Console.WriteLine(spaces(80))
+                Console.SetCursorPosition(0, Console.CursorTop - 1)
+            End If
+
+notThisModel:
+        Next
+
+        Console.WriteLine("# of Users:                 " + allUsernames.Count.ToString)
+        Console.WriteLine("# of Models Created:        " + numModelsCreated.ToString)
+        Console.WriteLine("# of Models Modified:       " + numModelsModified.ToString)
+        Console.WriteLine("Largest Diagram (# Comps):  " + biggestDiagram.ToString)
+        Console.WriteLine("Largest Diagram (Author):   " + bigDia + " by " + bigDiaAuthor)
+        Console.WriteLine("# Workflow Events:          " + numWorkflow.ToString)
+        'Console.WriteLine("# Tasks Created:            " + numTasks.ToString)
+        'Console.WriteLine("# Tasks Completed:          " + numCompletedTasks.ToString)
+
+        Dim K As Integer = 0
+
+        For K = 1 To dAuthors.Count
+            If dNumDiag(K - 1) > mostDiagrams Then
+                mostDiagrams = dNumDiag(K - 1)
+                mostDiaAuthor = dAuthors(K)
+            End If
+            If fullDetail Then
+                Console.WriteLine("         # Models: " + dAuthors(K) + spaces(40 - Len(dAuthors(K))) + dNumDiag(K - 1).ToString)
+            End If
+        Next
+
+        Dim numNoModels As Integer = 0
+
+        For K = 1 To allUsernames.Count
+            If grpNDX(dAuthors, allUsernames(K)) = 0 Then
+                numNoModels += 1
+                If fullDetail = True Then Console.WriteLine("        NO Models: " + allUsernames(K))
+            End If
+        Next
+
+        Console.WriteLine("Most Created:               " + mostDiaAuthor + " created " + mostDiagrams.ToString + " models")
+        Console.WriteLine("# Users with No Models:     " + numNoModels.ToString)
+
+
+    End Sub
+
+    Private Sub cleanLabels60(ByVal args() As String)
+
+
+        Console.WriteLine("Loading Entity objects" + vbCrLf)
+
+        Call loadNTY(T, "Components")
+        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        Call loadNTY(T, "Threats")
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        Call loadNTY(T, "SecurityRequirements")
+        Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString)
+        Call loadNTY(T, "Attributes")
+        Console.WriteLine("Attributes  : " + T.lib_AT6.Count.ToString)
+
+        Dim allowList As Collection = New Collection
+        T.librarieS = T.getLibsSIX
+
+        ' LIBS are added to ALLOW LIST
+        Console.WriteLine(vbCrLf + "Building allow list")
+        For Each L In T.librarieS
+            If L.IsSystemDepartment = True Then
+                allowList.Add(L.Name)
+                Console.WriteLine("LIB ON ALLOW: " + L.Name)
+            End If
+        Next
+
+        For Each tH In T.lib_TH6
+            Dim labelS As Collection = New Collection
+            labelS = CSVtoCOLL(tH.labels)
+            For Each labeL In labelS
+                If grpNDX(allowList, labeL, False) = 0 Then allowList.Add(labeL)
+            Next
+        Next
+
+        GoTo skipAllow
+        'this is allow before built out after analysis
+        Console.WriteLine(vbCrLf + "Allow List:")
+        For Each A In allowList
+            Console.WriteLine(A)
+        Next
+skipAllow:
+
+        'add these
+        '        allowList.Add("Protocols")
+        '        allowList.Add("Security Control")
+        '        allowList.Add("Trust Boundary")
+
+
+        'remove these
+        Dim rmNDX As Integer = 0
+        rmNDX = grpNDX(allowList, "AppSec and InfraSec", False)
+        If rmNDX > 0 Then allowList.Remove(rmNDX)
+        rmNDX = grpNDX(allowList, "ThreatModeler", False)
+        If rmNDX > 0 Then allowList.Remove(rmNDX)
+        '        rmNDX = grpNDX(allowList, "AppSec and InfraSec")
+        '        If rmNDX > 0 Then allowList.Remove(rmNDX)
+
+        Dim RFF As Integer = 0
+        RFF = FreeFile()
+        Dim removeList As Collection = New Collection
+
+        FileOpen(RFF, "remove_list.txt", OpenMode.Input)
+        Do Until EOF(RFF) = True
+            Dim rmTxt$ = ""
+            rmTxt = LineInput(RFF)
+            removeList.Add(rmTxt)
+        Loop
+        FileClose(RFF)
+
+
+        For rmNDX = allowList.Count To 1 Step -1
+            If Mid(allowList(rmNDX), 1, 4) = "CVE-" Then allowList.Remove(rmNDX)
+            If grpNDX(removeList, allowList(rmNDX), False) > 0 Then allowList.Remove(rmNDX)
+        Next
+
+        Dim denyList As Collection = New Collection
+        Dim numComps As Integer = 0
+        Dim totalDeleted As Integer = 0
+
+        Console.WriteLine(vbCrLf + "To be deleted:")
+
+        Dim csvFF As Integer = 0
+        Call safeKILL("comp_label_changes.csv")
+        csvFF = FreeFile()
+        FileOpen(csvFF, "comp_label_changes.csv", OpenMode.Output)
+        Print(csvFF, "ID,GUID,NAME,NEW_LABELS,OLD_LABELS" + vbCrLf)
+
+        For Each comP In T.lib_Comps6
+            Dim labelS As Collection = New Collection
+            labelS = CSVtoCOLL(comP.labels)
+            Dim newLabels$ = ""
+            ' If comP.name = "Windows Runtime" Then
+            '     Dim quithere As Integer = 0
+            '     quithere = 0
+            ' End If
+            For Each labeL In labelS
+                If labeL = "" Then GoTo skipBlankLabel
+                'If labeL = "Windows" Then
+                '    Dim quithere As Integer = 0
+                '    quithere = 0
+                'End If
+
+                If grpNDX(allowList, labeL, False) Then
+                    '                    Console.WriteLine("DELETE From COMP: " + comP.name + "   DELETE LABEL: " + labeL)
+                    'Console.WriteLine("KEEP: " + labeL)
+                    newLabels += LTrim(labeL) + ","
+                Else
+                    'Console.WriteLine("DELETE: " + labeL)
+                    If maybeKeep(labeL) = False Then
+
+                        If grpNDX(denyList, labeL, False) = 0 Then denyList.Add(labeL)
+                        totalDeleted += 1
+                    Else
+                        newLabels += labeL + ","
+                        allowList.Add(LTrim(labeL))
+                    End If
+                End If
+skipBlankLabel:
+            Next
+            '   If comP.componentTypeName = "Protocols" Or comP.componentTypeName = "Security Control" Or comP.componentTypeName = "Trust Boundary" Then
+            '      Dim cT = ""
+            '      cT = comP.componentTypeName
+            '      If InStr(newLabels, cT) = 0 Then newLabels += cT + ","
+            ' End If
+            If newLabels <> comP.labels Then
+                numComps += 1
+                If Len(newLabels) Then
+                    If Mid(newLabels, Len(newLabels), 1) = "," Then newLabels = Mid(newLabels, 1, Len(newLabels) - 1)
+                End If
+                Console.WriteLine(vbCrLf + comP.name + vbCrLf + " >> OLD: '" + comP.labels + "'" + vbCrLf + " >> NEW: '" + newLabels + "'")
+                Print(csvFF, comP.id.ToString + "," + comP.guid.ToString + "," + qT(comP.name) + "," + qT(newLabels) + "," + qT(comP.labels) + vbCrLf)
+            End If
+        Next
+        FileClose(csvFF)
+        Dim numSRsImpacted As Integer = 0
+
+        'Dim csvFF As Integer = 0
+        Call safeKILL("sr_label_changes.csv")
+        csvFF = FreeFile()
+        FileOpen(csvFF, "sr_label_changes.csv", OpenMode.Output)
+        Print(csvFF, "ID,GUID,NAME,NEW_LABELS,OLD_LABELS" + vbCrLf)
+
+        For Each sR In T.lib_SR6
+            Dim labelS As Collection = New Collection
+            labelS = CSVtoCOLL(sR.labels)
+            Dim newLabels$ = ""
+            For Each labeL In labelS
+                If labeL = "" Then GoTo skipBlankLabel2
+                'If labeL = "Windows" Then
+                '    Dim quithere As Integer = 0
+                '    quithere = 0
+                'End If
+                If grpNDX(allowList, labeL, False) Then
+                    '                    Console.WriteLine("DELETE From COMP: " + comP.name + "   DELETE LABEL: " + labeL)
+                    'Console.WriteLine("KEEP: " + labeL)
+                    newLabels += LTrim(labeL) + ","
+                Else
+                    'Console.WriteLine("DELETE: " + labeL)
+                    If maybeKeep(labeL) = False Then
+                        If grpNDX(denyList, labeL, False) = 0 Then denyList.Add(labeL)
+                        totalDeleted += 1
+                    Else
+                        newLabels += LTrim(labeL) + ","
+                        allowList.Add(labeL)
+                    End If
+                End If
+skipBlankLabel2:
+            Next
+            If newLabels <> sR.labels Then
+                numSRsImpacted += 1
+                If Len(newLabels) Then
+                    If Mid(newLabels, Len(newLabels), 1) = "," Then newLabels = Mid(newLabels, 1, Len(newLabels) - 1)
+                End If
+
+                Console.WriteLine(vbCrLf + sR.name + vbCrLf + " >> OLD: '" + sR.labels + "'" + vbCrLf + " >> NEW: '" + newLabels + "'")
+                Print(csvFF, sR.id.ToString + "," + sR.guid.ToString + "," + qT(sR.name) + "," + qT(newLabels) + "," + qT(sR.labels) + vbCrLf)
+
+            End If
+        Next
+        FileClose(csvFF)
+
+        Console.WriteLine(vbCrLf + "Full DENY List:")
+        For Each denieD In denyList
+            Console.WriteLine("DELETED: " + denieD)
+        Next
+
+        Console.WriteLine(vbCrLf + ">>>>>>>>>>    # in Allow List: " + allowList.Count.ToString)
+        Dim sqL$ = "DELETE FROM Labels WHERE Name NOT IN ("
+        For Each alloweD In allowList
+            Console.WriteLine("ALLOW: " + alloweD)
+            sqL += "'" + alloweD + "',"
+        Next
+        sqL = Mid(sqL, 1, Len(sqL) - 1) + ")"
+
+
+        Console.WriteLine(vbCrLf + "Attribute Labels:")
+        Dim atLBL As Collection = New Collection
+        For Each AT In T.lib_AT6
+            Dim lblCOL As Collection = New Collection
+            lblCOL = CSVtoCOLL(AT.labels)
+            For Each L In lblCOL
+                If grpNDX(atLBL, L, False) = 0 Then
+                    atLBL.Add(L)
+                    Console.WriteLine("ATTR_LBL:" + L)
+                End If
+            Next
+        Next
+
+        Console.WriteLine(vbCrLf + "SQL >>>>>>>>>>" + vbCrLf + sqL)
+
+
+        Console.WriteLine(vbCrLf + "Comparing ALLOW list to LABELS table")
+        Dim LLIST As List(Of tmLabels) = New List(Of tmLabels)
+        LLIST = T.getLabels()
+
+
+        Call safeKILL("labels_table_changes.csv")
+        csvFF = FreeFile()
+        FileOpen(csvFF, "label_table_changes.csv", OpenMode.Output)
+        Print(csvFF, "ID,NAME,ALLOW" + vbCrLf)
+
+        Dim numTossed As Integer = 0
+        Dim isOnAllow As Integer = 0
+        For Each LBL In LLIST
+            If grpNDX(allowList, LBL.Name, False) > 0 Then
+                isOnAllow += 1
+                Print(csvFF, LBL.Id.ToString + "," + qT(LBL.Name) + ",1" + vbCrLf)
+            Else
+                Print(csvFF, LBL.Id.ToString + "," + qT(LBL.Name) + ",0" + vbCrLf)
+                numTossed += 1
+            End If
+        Next
+
+        FileClose(csvFF)
+        Console.WriteLine(isOnAllow.ToString + "/" + LLIST.Count.ToString + " would be kept based on these actions, and " + numTossed.ToString + " would be deleted")
+
+        Console.WriteLine(vbCrLf + "# of Labels on Allow list: " + allowList.Count.ToString + vbCrLf + "# of Comps impacted: " + numComps.ToString + vbCrLf + "# of SRs impacted: " + numSRsImpacted.ToString + vbCrLf + "# of unique labels deleted: " + denyList.Count.ToString + vbCrLf + "# of labels deleted: " + totalDeleted.ToString)
+
+    End Sub
+
+    Private Function maybeKeep(ByVal a$) As Boolean
+        maybeKeep = False
+
+        If a = "CFN" Then
+            Return True
+        End If
+
+        If Len(a) < 3 Then
+            Exit Function
+        End If
+
+        If Mid(a, 1, 3) = "CWE" Then
+            Return True
+        End If
+        If Mid(a, 1, 3) = "FDA" Then
+            Return True
+        End If
+        If Mid(a, 1, 3) = "CIS" Then
+            Return True
+        End If
+        If Mid(a, 1, 4) = "GSR-" Then
+            Return True
+        End If
+        If Mid(a, 1, 4) = " SE-" Then
+            Return True
+        End If
+        If Mid(a, 1, 3) = "SE-" Then
+            Return True
+        End If
+        If Mid(a, 1, 4) = "ASR-" Then
+            Return True
+        End If
+        If Mid(a, 1, 5) = "AMSR-" Then
+            Return True
+        End If
+        If Mid(a, 1, 3) = "GS-" Then
+            Return True
+        End If
+
+        If Mid(a, 1, 5) = "MDSR-" Then
+            Return True
+        End If
+
+
+        If Mid(a, 1, 1) = "M" Then
+            If Len(a) = 5 Then
+                If Val(Mid(a, 2, 4)) > 0 Then
+                    Return True
+                    'M1018, M2839, etc
+                End If
+            End If
+        End If
+
+        If Mid(a, 1, 3) = "TM-" Then
+            Return True
+        End If
+
+    End Function
+
+
+
+    Private Sub csv2Model(modelName$, fileN$)
+        ' this is 6.0 version
+        Call loadNTY(T, "Components")
+        'Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+
+        Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+        jsonObj = csv2JSON60(fileN)
+
+        If jsonObj.Count = 0 Then
+            Console.WriteLine("ERROR: No objects built from CSV - Aborting")
+            End
+        End If
+
+        Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+        safeKILL(fileN + ".json")
+        saveJSONtoFile(jsonFile, fileN + ".json")
+        fileN += ".json"
+
+
+        Dim modelNum$ = "" ' As Integer
+        Dim result2$ = T.createKISSmodelForImport(modelName)
+        modelNum = result2
+        If modelNum = "" Or InStr(modelNum, "ERROR") > 0 Then
+            Console.WriteLine("Unable to create project - " + result2)
+            End
+        End If
+        Console.WriteLine("Submitting JSON for import into Project " + modelNum + "  Name: " + modelName)
+
+        Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
+        If Mid(resP, 1, 5) = "ERROR" Then
+            Console.WriteLine(resP)
+        Else
+            Console.WriteLine(T.tmFQDN + "/threatmodeldiagram/" + modelNum.ToString)
+        End If
+        End
+    End Sub
+
+
     Private Sub i2i_AllCompCompare60(ByVal args() As String)
         'This should be comp_compare
         Dim i2 = argValue("i2", args)
@@ -8346,7 +9129,7 @@ skipUserLoop:
         Console.WriteLine("# unique to I2   : " + t2GUIDunq.Count.ToString)
         Console.WriteLine("Total # Comps    : " + (matchGUIDs.Count + t2GUIDunq.Count + t1GUIDunq.Count).ToString)
 
-        If docsv = True Then
+        If doCSV = True Then
             FF = FreeFile()
             FileOpen(FF, file, OpenMode.Output)
             Print(FF, "Library,Component,CompID,Comp_Type,#TH_I1,#SR_I1,#DIR_SR_I1,#UNQSR_I1,#ATTR_I1,MAX#TH_I1,MAX#SR_I1,#TH_I2,#SR_I2,#DIR_SR_I2,#UNQSR_I1,#ATTR_I2,MAX#TH_I2,MAX#SR_I2,#MATCH,#UNQ_I1,#UNQ_I2,#ID_DIFF,#NAMEDIFF,#DEF_DIFF,#LIB_DIFF,DIFF_EXPLANATION" + vbCrLf)
@@ -8356,7 +9139,7 @@ skipUserLoop:
         '#TH_I2,#SR_I2,#DIR_SR_I2,#ATTR_I2,MAX#TH_I2,MAX#SR_I2
 
         'Dim T.libraries As List(Of tmLibrary)=nbew list(Of tmlibrary)
-        T.libraries = T.getLibsSIX
+        T.librarieS = T.getLibsSIX
         T2.librarieS = T2.getLibsSIX
 
         For Each matchGUID In matchGUIDs
@@ -8365,11 +9148,11 @@ skipUserLoop:
 
             Console.WriteLine("Evaluating " + C1.name + " [" + C1.id.ToString + "] against " + C2.name + " [" + C2.id.ToString + "] - Threats: " + C1.numThreats.ToString + " / " + C2.numThreats.ToString)
 
-            If IsNothing(C1.classDef) Then
+            If IsNothing(C1.classDef.threats) Then
                 Console.WriteLine("ERROR: Could not retrieve " + C1.name + " [" + C1.id.ToString + "] from " + T.tmFQDN + " - skipping")
                 GoTo skipThisOne
             End If
-            If IsNothing(C2.classDef) Then
+            If IsNothing(C2.classDef.threats) Then
                 Console.WriteLine("ERROR: Could not retrieve " + C2.name + " [" + C2.id.ToString + "] from " + T2.tmFQDN + " - skipping")
                 GoTo skipThisOne
             End If
@@ -8397,7 +9180,7 @@ skipThisOne:
 
             Console.WriteLine("Evaluating " + C1.name + " [" + C1.id.ToString + "] is unique to " + T.tmFQDN) ' " + C2.name + " [" + C2.id.ToString + "] - Threats: " + C1.numThreats.ToString + " / " + C2.numThreats.ToString)
 
-            If IsNothing(C1.classDef) Then
+            If IsNothing(C1.classDef.threats) Then
                 Console.WriteLine("ERROR: Could not retrieve " + C1.name + " [" + C1.id.ToString + "] from " + T.tmFQDN + " - skipping")
                 GoTo skipThisOne2
             End If
@@ -8423,7 +9206,7 @@ skipThisOne2:
 
             Console.WriteLine("Evaluating " + C2.name + " [" + C2.id.ToString + "] is unique to " + T2.tmFQDN)
 
-            If IsNothing(C2.classDef) Then
+            If IsNothing(C2.classDef.threats) Then
                 Console.WriteLine("ERROR: Could not retrieve " + C2.name + " [" + C2.id.ToString + "] from " + T2.tmFQDN + " - skipping")
                 GoTo skipThisOne3
             End If
@@ -8445,6 +9228,134 @@ skipThisOne3:
         FileClose(FF)
     End Sub
 
+    Private Sub findDupOptions()
+        Console.WriteLine("Loading..")
+        Call loadNTY(T, "Attributes")
+        Console.WriteLine("Attributes    : " + T.lib_AT6.Count.ToString)
+
+        Dim unqOPTS As Collection = New Collection
+        Dim unqOPTIDs(5000) As Integer
+
+        For Each A In T.lib_AT6
+            For Each O In A.options
+                Dim gNDX As Integer = grpNDX(unqOPTS, O.name)
+                If gNDX = 0 Then
+                    unqOPTS.Add(O.name)
+                    unqOPTIDs(unqOPTS.Count - 1) = 1
+                Else
+                    unqOPTIDs(gNDX - 1) += 1
+                End If
+            Next
+        Next
+        Dim K As Integer = 0
+
+        Dim FF As Integer = 0
+        FF = FreeFile()
+        FileOpen(FF, "dup_attr_options.csv", OpenMode.Output)
+        Print(FF, "ATTR OPTION NAME,COUNT" + vbCrLf)
+        For K = 1 To unqOPTS.Count
+            If unqOPTIDs(K - 1) > 1 Then
+                Print(FF, Chr(34) + unqOPTS(K) + Chr(34) + "," + unqOPTIDs(K - 1).ToString + vbCrLf)
+            End If
+        Next
+        FileClose(FF)
+    End Sub
+    Private Sub findDupThreatsAndATTROptions()
+        Console.WriteLine("Loading Comps & Threats..")
+
+        Call loadNTY(T, "Components")
+        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        Call loadNTY(T, "Threats")
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        '       Call loadNTY(T, "Attributes")
+        '        Console.WriteLine("Attributes    : " + T.lib_AT6.Count.ToString)
+
+        Dim c$ = ","
+
+        Dim FF As Integer = 0
+        FF = FreeFile()
+
+        Dim cFile$ = "comps_with_dup_threats.csv"
+
+        Call safeKILL(cFile)
+        FileOpen(FF, cFile, OpenMode.Output)
+        Print(FF, "CompID,CompNAME,ThreatID,ThreatNAME,#_DUP,Location" + vbCrLf)
+
+
+        Dim numComps As Collection = New Collection
+
+        For Each cO In T.lib_Comps6
+
+            Dim unqThreats As Collection = New Collection
+            Dim dupThreats As Collection = New Collection
+
+            'cO = T.guidCOMP6("fb29cbf9-1569-4383-af24-167d7bd2d756")
+
+            Dim C1 As tm6Component = T.getTF6CompDef(T.guidCOMP6(cO.guid))
+
+
+            For Each tH In C1.classDef.threats
+                If grpNDX(unqThreats, tH.guid) <> 0 Then
+                    If grpNDX(numComps, cO.id) = 0 Then numComps.Add(cO.id)
+                    If grpNDX(dupThreats, tH.guid) = 0 Then
+                        dupThreats.Add(tH.guid)
+                    End If
+                Else
+                    unqThreats.Add(tH.guid)
+                End If
+            Next
+            For Each aT In C1.classDef.properties
+                For Each O In aT.options
+                    For Each tH In O.threats
+                        If grpNDX(unqThreats, tH.guid) <> 0 Then
+                            If grpNDX(dupThreats, tH.guid) = 0 Then
+                                dupThreats.Add(tH.guid)
+                            End If
+                        Else
+                            unqThreats.Add(tH.guid)
+                        End If
+                    Next
+                Next
+            Next
+
+            Console.WriteLine(cO.name + " [" + cO.id.ToString + "]: " + dupThreats.Count.ToString + " duplicates")
+
+            For Each thGUID In dupThreats
+                ' now we know which threats are duplicated in component
+                Dim line$ = ""
+                Dim location$ = ""
+                With T.guidTHREAT6(thGUID)
+                    line = C1.id.ToString + c + qT(C1.name) + c + .id.ToString + c + qT(.name) + c + dupThreats.Count.ToString + c
+
+                    Dim isDirectlyAttached As Boolean = False
+
+                    For Each tH In C1.classDef.threats
+                        If tH.id = .id Then
+                            location += "[" + C1.name + "],"
+                            isDirectlyAttached = True
+                        End If
+                    Next
+                    For Each aT In C1.classDef.properties
+                        For Each O In aT.options
+                            For Each tH In O.threats
+                                If tH.id = .id And isDirectlyAttached = True Then
+                                    location += "[" + aT.name + "] > [" + O.name + "],"
+                                End If
+                            Next
+                        Next
+                    Next
+                    If isDirectlyAttached = True Then
+                        line += qT(Mid(location, 1, Len(location) - 1))
+                        If isDirectlyAttached = True Then Console.WriteLine(line)
+                        If isDirectlyAttached = True Then Print(FF, line + vbCrLf)
+                    End If
+                End With
+            Next
+        Next
+        '        Console.WriteLine(vbCrLf + "# of Components with Duplicates: " + numComps.Count.ToString)
+        FileClose(FF)
+        End
+    End Sub
     Private Function compCompare(ByRef C1 As tm6Component, ByRef C2 As tm6Component) As String
         If C1.name = "AWS Docker" Or C2.name = "AWS Docker" Then
             'here is where you can catch unq issue (should be unq to tmrc6/C2)
@@ -8584,7 +9495,7 @@ skipThisOne3:
         Console.WriteLine(fLine("platform_usage", "Returns statistics according to Usage"))
 
         Console.WriteLine(fLine("get_libs", "Returns Libraries"))
-        Console.WriteLine(fLine("get_labels", "Returns Labels, arg: --ISSYSTEM (True/False)"))
+        Console.WriteLine(fLine("get_labels", "Returns Labels, arg: opt --ISSYSTEM (True/False) --file filename.csv"))
         'Console.WriteLine(fLine("summary", "Returns a summary of all Threat Models"))
         Console.WriteLine(fLine("template_convert", "text"))
 
@@ -8639,6 +9550,19 @@ skipThisOne3:
         Console.WriteLine(fLine("i2i_allcomp_update", "Shows differences in components between 2 instances (update testing)"))
         Console.WriteLine(fLine("i2i_comp_compare", "Shows difference in a single component across instances, use --ID or --NAME (component)"))
 
+        Console.WriteLine(vbCrLf + "6.0 Commands" + vbCrLf + "=================================================")
+
+        Console.WriteLine(fLine("i2i_comp_compare", "Creates full CSV suitable for pivot highlighting TF differences between 2 servers, args --I2 (fqdn), --FILE (.csv)"))
+        Console.WriteLine(fLine("get_users", "Gets users"))
+        Console.WriteLine(fLine("clean_entity_labels", "Removes unnecessary labels from Components & SRs, not incl those associated with Libs or Threats, args --delete true (otherwise output only)"))
+        Console.WriteLine(fLine("get_labels", "Returns Labels, arg: opt --file filename.csv"))
+        Console.WriteLine(fLine("template_check", "Finds templates with broken links, tells you what they are in summary breakdown"))
+        'find_bad_dups, find_dup_opts
+        Console.WriteLine(fLine("find_bad_dups", "Finds components with threats that are duplicated on the attributes -creates csv"))
+        Console.WriteLine(fLine("find_dup_opts", "Finds all options of all attributes and reports on duplicates"))
+        Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
+        Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
+        Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
 
     End Sub
 
