@@ -245,15 +245,30 @@ Public Class TM_Client
             Console.WriteLine(vbCrLf + "RESPONSE:" + vbCrLf + response.Content)
         End If
 
+        Dim dStr = "Data"
         Dim isSuccessStr$ = "IsSuccess"
-        If isTMsix = True Then isSuccessStr = "isSuccess"
 
+        If isTMsix = True Then
+            isSuccessStr = "isSuccess"
+            dStr = "data"
+        End If
 
         If IsNothing(O.SelectToken(isSuccessStr)) = True Then
+            ' here check for version
+            If isTMsix = True Then
+                If IsNothing(O.SelectToken("IsSuccess")) = False Then
+                    ' this is a call with unexpected capitalization
+                    isSuccessStr = "IsSuccess"
+                    dStr = "Data"
+                    GoTo keepGoing
+                End If
+            End If
             Console.WriteLine("API Request Rejected:  " + urI)
             getAPIData = ""
             Exit Function
         End If
+
+keepGoing:
 
         '        If Len(addFileN) Then
         '            If O.SelectToken("IsSuccess").ToString = "true" Then
@@ -268,8 +283,6 @@ Public Class TM_Client
             Exit Function
         End If
 
-        Dim dStr$ = "Data"
-        If isTMsix Then dStr = "data"
         If IsNothing(O.SelectToken(dStr)) = True Then
             If IsNothing(O.SelectToken(isSuccessStr)) = True Then
                 Return ""
@@ -290,6 +303,13 @@ Public Class TM_Client
         getMatildaDiscover = JsonConvert.DeserializeObject(Of matildaApp)(jsoN)
     End Function
 
+    Public Function getRonnieIssues(fileN$) As List(Of ronnieIssue)
+        getRonnieIssues = New List(Of ronnieIssue)
+        Dim jsoN$ = streamReaderTxt(fileN)
+        If jsoN = "" Then Exit Function
+
+        getRonnieIssues = JsonConvert.DeserializeObject(Of List(Of ronnieIssue))(jsoN)
+    End Function
     Public Function getLibraries() As List(Of tmLibrary)
         getLibraries = New List(Of tmLibrary)
         Dim jsoN$ = getAPIData("/api/libraries")
@@ -414,6 +434,44 @@ errorcatch:
         getAllProjects = JsonConvert.DeserializeObject(Of List(Of tmProjInfo))(jsoN)
 
     End Function
+
+    Public Function getSRsOfProject6(guiD$) As List(Of tm6SRsOfModel)
+        getSRsOfProject6 = New List(Of tm6SRsOfModel)
+
+        Dim bodY$ = "{" + qT("guid") + ": " + qT(guiD) + "," + qT("pageNumber") + ": 1," + qT("pageLimit") + ": 10000}"
+        Dim jsoN$ = getAPIData("/api/project/securityrequirements", True, bodY) '/smartfilter", True, bodY)
+
+        Dim O As JObject = JObject.Parse(jsoN)
+        jsoN = O.SelectToken("data").ToString
+
+        getSRsOfProject6 = JsonConvert.DeserializeObject(Of List(Of tm6SRsOfModel))(jsoN)
+
+    End Function
+    Public Function getThreatsOfProject6(guiD$) As List(Of tm6ThreatsOfModel)
+        getThreatsOfProject6 = New List(Of tm6ThreatsOfModel)
+
+        Dim bodY$ = "{" + qT("pageNumber") + ": 1," + qT("pageLimit") + ": 10000}"
+        Dim jsoN$ = getAPIData("/api/project/" + guiD + "/threats", True, bodY) '/smartfilter", True, bodY)
+
+        Dim O As JObject = JObject.Parse(jsoN)
+        jsoN = O.SelectToken("data").ToString
+
+        getThreatsOfProject6 = JsonConvert.DeserializeObject(Of List(Of tm6ThreatsOfModel))(jsoN)
+
+    End Function
+
+    Public Function getNodesOfProject6(guiD$) As List(Of tm6NodesOfModel)
+        getNodesOfProject6 = New List(Of tm6NodesOfModel)
+
+        Dim jsoN$ = getAPIData("/api/diagram/" + guiD) '/smartfilter", True, bodY)
+
+        Dim O As JObject = JObject.Parse(jsoN)
+        jsoN = O.SelectToken("Model").SelectToken("nodeDataArray").ToString
+
+        getNodesOfProject6 = JsonConvert.DeserializeObject(Of List(Of tm6NodesOfModel))(jsoN)
+
+    End Function
+
 
     Public Function getAllProjects6() As List(Of tmProjInfoShort6)
         getAllProjects6 = New List(Of tmProjInfoShort6)
@@ -569,7 +627,17 @@ errorcatch:
 
         getTF6Components = JsonConvert.DeserializeObject(Of List(Of tm6Component))(jsoN)
     End Function
+    Public Function getTF6SingleComp(rID as integer) As tm6Component
+        getTF6SingleComp = New tm6Component
+        Dim c$ = Chr(34)
+        Dim jBody$ = "{id: " + rID.ToString + ",entityTypeName: " + c + "component" + c + "}"
+        Dim urL$ = "/api/library/getrecordbyid"
 
+        Dim jsoN$ = getAPIData(urL, True, jBody$)
+
+        getTF6SingleComp = JsonConvert.DeserializeObject(Of tm6Component)(jsoN)
+
+    End Function
     Public Function getTF6Threats() As List(Of tm6Threat)
         getTF6Threats = New List(Of tm6Threat)
 
@@ -1093,6 +1161,56 @@ is6:
         Dim json$ = getAPIData("/api/threatframework/master/addedit", True, jBody)
         Return json
     End Function
+
+
+
+
+    ' 6.0 TF edits
+
+    Public Function addComps60(newComps As List(Of entityModelComp)) As String
+        Dim newObj As entityAddPayload = New entityAddPayload
+        newObj.entityTypeName = "Component"
+        newObj.model = JsonConvert.SerializeObject(newComps)
+
+        Return addEntityObject(newObj)
+    End Function
+
+    Public Function addThreats60(newThreats As List(Of entityModelThreat)) As String
+        Dim newObj As entityAddPayload = New entityAddPayload
+        newObj.entityTypeName = "Threat"
+        newObj.model = JsonConvert.SerializeObject(newThreats)
+
+        Return addEntityObject(newObj)
+    End Function
+
+    Public Function addSRs60(newSRs As List(Of entityModelSR)) As String
+        Dim newObj As entityAddPayload = New entityAddPayload
+        newObj.entityTypeName = "SecurityRequirement"
+        newObj.model = JsonConvert.SerializeObject(newSRs)
+
+        Return addEntityObject(newObj)
+    End Function
+
+    Public Function addEntityObject(newEntity As entityAddPayload) As String
+
+        Dim jBody$ = JsonConvert.SerializeObject(newEntity)
+        Dim json$ = getAPIData("/api/library/addrecords", True, jBody)
+        Return json
+    End Function
+
+    Public Function addComponentStructure(compStructure As compStructurePayload) As String
+        Dim jBody$ = JsonConvert.SerializeObject(compStructure)
+        Dim json$ = getAPIData("/api/library/SaveComponentRelationshipDetails", True, jbody)
+        Return json
+    End Function
+
+
+
+
+
+
+
+
 
     Public Function addSR(SR As tmProjSecReq) As Boolean
         addSR = False
@@ -2477,6 +2595,9 @@ skipThose:
         ndxATTR = -1
 
         Dim ndX As Integer = 0
+
+        If isTMsix = True Then GoTo tm6
+
         For Each P In lib_AT
             If P.Id = ID Then
                 Return ndX
@@ -2484,6 +2605,21 @@ skipThose:
             End If
             ndX += 1
         Next
+
+        Return ndxATTR
+        Exit Function
+
+tm6:
+        For Each P In lib_AT6
+            If P.id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+        Return ndxATTR
+        Exit Function
 
     End Function
 
@@ -2549,6 +2685,9 @@ skipThose:
         ndxTHlib = -1
 
         Dim ndX As Integer = 0
+
+        If isTMsix = True Then GoTo tm6
+
         For Each P In lib_TH
             If P.Id = ID Then
                 Return ndX
@@ -2557,12 +2696,32 @@ skipThose:
             ndX += 1
         Next
 
+        Return ndxTHlib
+        Exit Function
+
+tm6:
+
+        For Each P In lib_TH6
+            If P.id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+        Return ndxTHlib
+        Exit Function
+
+
     End Function
 
     Public Function ndxSRlib(ID As Long) As Integer
         ndxSRlib = -1
 
         Dim ndX As Integer = 0
+
+        If isTMsix = True Then GoTo tm6
+
         For Each P In lib_SR
             If P.Id = ID Then
                 Return ndX
@@ -2570,6 +2729,21 @@ skipThose:
             End If
             ndX += 1
         Next
+
+        Return ndxSRlib
+        Exit Function
+
+tm6:
+        For Each P In lib_SR6
+            If P.id = ID Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+        Return ndxSRlib
+        Exit Function
 
     End Function
 
@@ -2882,28 +3056,53 @@ nextInList2:
 
     Public Function ndxTHbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxTHbyName = -1
+        Dim ndX As Integer = 0
 
         'had to change this as passing byref from multi-threaded main causing issues
+        If isTMsix Then GoTo tm6
 
-        Dim ndX As Integer = 0
-            For Each P In lib_TH
-                If LCase(P.Name) = LCase(name) Then
-                    Return ndX
-                    Exit Function
-                End If
-                ndX += 1
-            Next
+        For Each P In lib_TH
+            If LCase(P.Name) = LCase(name) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+        Exit Function
+
+tm6:
+        For Each P In lib_TH6
+            If LCase(P.name) = LCase(name) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
 
     End Function
 
     Public Function ndxSRbyName(name$) As Integer ', ByRef alL As List(Of tmComponent)) As Integer
         ndxSRbyName = -1
+        Dim ndX As Integer = 0
 
         'had to change this as passing byref from multi-threaded main causing issues
+        If isTMsix Then GoTo tm6
 
-        Dim ndX As Integer = 0
         For Each P In lib_SR
             If LCase(P.Name) = LCase(name) Then
+                Return ndX
+                Exit Function
+            End If
+            ndX += 1
+        Next
+
+        Exit Function
+
+tm6:
+
+        For Each P In lib_SR6
+            If LCase(P.name) = LCase(name) Then
                 Return ndX
                 Exit Function
             End If
@@ -3380,7 +3579,328 @@ Public Class tmTemplate
 
 End Class
 
-Public Class matildaApp
+'Public Class ronnieJSON
+'    {"Collection": {"Engagement_Name": {"Metadata": {"Engagement_Type": "TM"},
+'                  "Issues": [
+'                        {     "Threat_Agent": "     TA-UNAUTHZ-EXT    TA-UNAUTHZ-INT   ",
+'                              "Threat_Object": "         TO-ADFS-SERVICE      TO-Credentials-Admin    ",
+'                              "Attack_Scenario": "   Description ",
+'                              "Threat_type": "Spoofing,Non-Repudiatio,Elevation of Privilege,Lateral movement    ",
+'                              "Attack_Surface": "   xxx  API   ",
+'                              "Attack_Vector": "       Mitre Tactic:    Initial Access  Discovery  Collection    Technique: Phishing  Credential Harvesting  Account Discovery  Input Capture: Key Logging  Input Capture: Web Portal Capture  Man in the browser   ",
+'                              "Attack_Goal": "   Description  ",
+'                              "Attack_Impact": "High",
+'                              "Threat_Rating": "Very High",
+'                              "Control_Section": "       Control (Protect/Detect):        C-Security-Awareness   All employees should undergo continuous learning around security best practices.   C-AuthN-MFA   Console based access to critical systems should enforce use of Multi-factor Authentication.   C-AuthN-JIT   Just in time access to critical systems should be based on a check In/Check out process leveraging a credential vault.   C-Bastion-Host-Access ",
+'                              "Recommendation": "   <description>     ",
+'                              "ID": 1
+'                        }]}}
+' EXPANDED: "Control_Section": "       Control (Protect/Detect):        
+'                                      C-Security-Awareness   All employees should undergo continuous learning around security best practices.   
+'                                      C-AuthN-MFA   Console based access to critical systems should enforce use of Multi-factor Authentication.   
+'                                      C-AuthN-JIT   Just in time access to critical systems should be based on a check In/Check out process leveraging a credential vault.   
+'                                      C-Bastion-Host-Access ",
+'                              
+Public Class ronnieIssue
+    Public Threat_Agent As String
+    Public Threat_Object As String
+    Public Attack_Scenario As String
+    Public Threat_type As String
+    Public Attack_Surface As String
+    Public Attack_Vector As String
+    Public Attack_Goal As String
+    Public Attack_Impact As String
+    Public Threat_Rating As String
+    Public Control_Section As String
+    Public Recommendation As String
+    Public ID As Integer
+
+    Public Function getAttackVectorSingle() As String
+        Return Replace(LTrim(Attack_Vector), "  ", "<br>")
+    End Function
+    Public Function getAttackVectorList() As Collection
+        Dim aV As Collection = New Collection
+        Dim avStr$ = Replace(Attack_Vector, "  ", ",")
+        Dim cList As Collection = CSVtoCOLL(avStr)
+
+        For Each V In cList
+            Dim a$ = LTrim(RTrim(V))
+            If a = "Mitre Tactic:" Or a = "Initial Access" Or a = "Discovery" Or a = "Collection" Then GoTo skipThis
+            aV.Add(a)
+skipThis:
+        Next
+
+        Return aV
+    End Function
+    Public Function getThreatAgents() As Collection
+        Dim aV As Collection = New Collection
+        Dim avStr$ = Replace(Threat_Agent, "  ", ",")
+        Dim cList As Collection = CSVtoCOLL(avStr)
+
+        For Each V In cList
+            Dim a$ = LTrim(RTrim(V))
+            If Len(a) Then aV.Add(a)
+        Next
+
+        Return aV
+    End Function
+
+    Public Function getAgentModels() As List(Of entityModelComp)
+        getAgentModels = New List(Of entityModelComp)
+
+        For Each agenT In Me.getThreatAgents
+            Dim newAgent As entityModelComp = New entityModelComp
+            newAgent.name = agenT
+            newAgent.labels = COLLtoCSV(Me.getThreatObjects)
+            newAgent.imagepath = "/ComponentImage/devil.png"
+            newAgent.description = "Threat Agent " + agenT + " related to objects: " + newAgent.labels
+            getAgentModels.Add(newAgent)
+        Next agenT
+
+    End Function
+
+    Public Function getThreatModels() As List(Of entityModelThreat)
+        getThreatModels = New List(Of entityModelThreat)
+
+        Dim lF$ = "<br>"
+        Dim newThreat As entityModelThreat = New entityModelThreat
+
+        newThreat.name = "Issue ID " + Me.ID.ToString + " " + Replace(COLLtoCSV(Me.getThreatObjects), ",", " ")
+        newThreat.labels = LTrim(RTrim(Me.Threat_type))
+        newThreat.setRiskIdByString(Me.Threat_Rating)
+        newThreat.description = "Scenario: " + Me.Attack_Scenario + lF + "Impact    : " + Me.Attack_Impact + lF + "Rating    : " + Me.Threat_Rating + lF + "Goal     : " + Me.Attack_Goal + lF + lF + Me.getAttackVectorSingle
+        getThreatModels.Add(newThreat)
+
+    End Function
+
+    Public Function getSReqModels(Optional splitControls As Boolean = False) As List(Of entityModelSR)
+
+        getSReqModels = New List(Of entityModelSR)
+
+        Select Case splitControls
+            Case False
+                Dim newSR As entityModelSR = New entityModelSR
+                newSR.name = "Issue " + Me.ID.ToString + " Controls"
+                newSR.description = Me.getControlsSingle
+                getSReqModels.Add(newSR)
+
+            Case True
+                For Each sR In Me.getControls
+                    Dim newSR As entityModelSR = New entityModelSR
+
+                    newSR.name = sR.controlName
+                    newSR.description = sR.controlDescription
+                    getSReqModels.Add(newSR)
+                Next sR
+        End Select
+
+    End Function
+
+
+    Public Function getThreatObjects() As Collection
+        Dim aV As Collection = New Collection
+        Dim avStr$ = Replace(Threat_Object, "  ", ",")
+        Dim cList As Collection = CSVtoCOLL(avStr)
+
+        For Each V In cList
+            Dim a$ = LTrim(RTrim(V))
+            If Len(a) Then aV.Add(a)
+        Next
+
+        Return aV
+    End Function
+
+    Public Function getControls() As List(Of controlObj)
+        ' "Control_Section": "       Control (Protect/Detect):        C-Security-Awareness   All employees should undergo continuous learning around security best practices.   C-AuthN-MFA   Console based access to critical systems should enforce use of Multi-factor Authentication.   C-AuthN-JIT   Just in time access to critical systems should be based on a check In/Check out process leveraging a credential vault.   C-Bastion-Host-Access ",
+        Dim cS As List(Of controlObj) = New List(Of controlObj)
+        Dim csStr$ = Replace(Control_Section, "  ", ",")
+        Dim csList As Collection = CSVtoCOLL(csStr)
+
+        Dim cLoop As Integer = 0
+        For cLoop = 1 To csList.Count
+            Dim a$ = LTrim(RTrim(csList(cLoop)))
+            If Mid(a, 1, 2) = "C-" Then
+                Dim newCS As New controlObj
+                newCS.controlName = a
+                If cLoop + 1 <= csList.Count Then newCS.controlDescription = LTrim(RTrim(csList(cLoop + 1))) Else newCS.controlDescription = ""
+                cS.Add(newCS)
+            End If
+        Next
+
+        Return cS
+    End Function
+
+    Public Function getControlsSingle() As String
+        Return Replace(LTrim(Control_Section), "  ", "<br>") + "<br>" + Recommendation
+    End Function
+
+End Class
+
+Public Class controlObj
+    Public controlName$
+    Public controlDescription$
+End Class
+
+
+
+
+
+
+
+
+' ------------- 6.0 Threat Framework modification classes -----------------
+Public Class compStructurePayload
+    Public [Type] As String
+    Public Id As Integer
+    Public threats As List(Of threatStructurePayload)
+    Public securityRequirements As List(Of srStructurePayload)
+    Public properties As List(Of attrStructurePayload)
+
+    Public Sub New()
+        Me.Type = "Component"
+        threats = New List(Of threatStructurePayload)
+        securityRequirements = New List(Of srStructurePayload)
+        properties = New List(Of attrStructurePayload)
+    End Sub
+End Class
+Public Class threatStructurePayload
+    Public Id As Integer
+    Public [Type] As String
+    Public isDefault As Boolean
+    Public securityRequirements As List(Of srStructurePayload)
+
+    Public Sub New()
+        Me.Type = "Threat"
+        Me.isDefault = False
+        securityRequirements = New List(Of srStructurePayload)
+    End Sub
+End Class
+
+Public Class srStructurePayload
+    Public Id As Integer
+    Public [Type] As String
+
+    Public Sub New()
+        Me.Type = "SecurityRequirement"
+    End Sub
+End Class
+Public Class entityAddPayload
+    Public entityTypeName As String
+    Public model As String
+End Class
+
+Public Class attrStructurePayload
+    Public Id As Integer
+    Public [Type] As String
+    Public isOptional As Boolean
+    Public options As List(Of optionStructurePayload)
+    Public Sub New()
+        Me.Type = "Property"
+        options = New List(Of optionStructurePayload)
+    End Sub
+End Class
+
+Public Class optionStructurePayload
+    Public Id As Integer
+    Public [Type] As String
+    Public isDefault As Boolean
+    Public threats As List(Of threatStructurePayload)
+
+    Public Sub New()
+        Me.Type = "Option"
+        Me.isDefault = False
+        threats = New List(Of threatStructurePayload)
+    End Sub
+End Class
+
+Public Class entityModelComp
+    ' COMP MODEL
+    '
+    '"[{\"id\":0,\"name\":\"Another new component\",\"description\":\"<p>Here is my description2222</p>\",\"labels\":\"tag1\",\"libraryId\":0,\"guid\":null,\"imagepath\":\"/ComponentImage/icon-developer-icon.png\",
+    ' \"componentTypeId\":3,\"componentTypeName\":\"Component\"}]"}
+    '
+    ' THREAT MODEL
+    ' {"EntityTypeName":"Threat","Model":"[{\"id\":0,\"name\":\"New threat\",\"description\":\"\",\"riskId\":1,\"libraryId\":0,\"guid\":null,\"labels\":\"\",\"isHidden\":false}]"}
+    '
+    ' SR
+    ' {"EntityTypeName":"SecurityRequirement","Model":"[{\"id\":0,\"name\":\"New SR\",\"libraryId\":0,\"guid\":null,\"description\":\"\",\"labels\":\"\",\"isHidden\":false}]"}
+
+    Public id As Integer
+    Public name As String
+    Public description As String
+    Public labels As String
+    Public libraryId As Integer
+    Public guid As String
+    Public imagepath As String
+    Public componentTypeId As Integer
+    Public componentTypeName As String
+
+    Public Sub New()
+        id = 0
+        libraryId = 0
+        imagepath = "/ComponentImage/icon-developer-icon.png"
+        componentTypeName = "Component"
+        componentTypeId = 3
+    End Sub
+End Class
+
+Public Class entityModelThreat
+    Public id As Integer
+    Public name As String
+    Public description As String
+    Public riskId As Integer ' 1=very high, 5=very low
+    Public libraryId As Integer
+    Public guid As String
+    Public labels As String
+    Public isHidden As Boolean
+
+    Public Sub setRiskIdByString(riskDescription)
+        Select Case LCase(riskDescription)
+            Case "very high"
+                riskId = 1
+            Case "high"
+                riskId = 2
+            Case "medium"
+                riskId = 3
+            Case "low"
+                riskId = 4
+            Case "very low"
+                riskId = 5
+        End Select
+    End Sub
+
+    Public Sub New()
+        libraryId = 0
+        isHidden = False
+        riskId = 1
+    End Sub
+End Class
+
+Public Class entityModelSR
+        Public id As Integer
+        Public name As String
+    Public description As String
+    Public libraryId As Integer
+    Public guid As String
+        Public labels As String
+        Public isHidden As Boolean
+
+    Public Sub New()
+        libraryId = 0
+        isHidden = False
+    End Sub
+End Class
+
+
+
+
+
+
+
+
+
+
+    Public Class matildaApp
     ' 	"app_id": "7",
     '"app_name": "MJT",
     '"app_owner": "Rajesh",
@@ -3537,18 +4057,232 @@ Public Class tmProjActivity6
     Public diagramObjectType$
     Public source$
     Public sourceId$
-    Public innerModels As List(Of tmInnerModel6)
+    'Public innerModels As List(Of tmInnerModel6)
 
     Public Sub New()
-        innerModels = New List(Of tmInnerModel6)
+        '    innerModels = New List(Of tmInnerModel6)
     End Sub
 End Class
 
+Public Class tm6ThreatsOfModel
+    '{
+    '    "id": 170004,
+    '    "threatName": "Accessing Functionality Not Properly Constrained by ACLs",
+    '    "sourceName": "Web Service",
+    '    "sourceDisplayName": "Web Service",
+    '    "actualRiskId": 2,
+    '    "threatId": 1435,
+    '    "projectId": 2220,
+    '    "projectGuid": "1527b361-0f8f-4bad-a8c5-817eae2a04ad",
+    '    "actualRisk": {
+    '        "id": 2,
+    '        "name": "High",
+    '        "color": "#e32c2c",
+    '        "score": 4
+    '    },
+    '    "actualRiskName": "High",
+    '    "dateCreated": "0001-01-01T00:00:00",
+    '    "statusName": "Mitigated by Control",
+    '    "type": 0,
+    '    "sourceId": 25431,
+    '    "sourceType": "Node",
+    '    "componentId": 248,
+    '    "componentName": "Web Service",
+    '    "componentTypeId": 3,
+    '    "componentTypeName": "Component",
+    '    "imagePath": "/ComponentImage/webservice.png",
+    '    "threatGuid": "ce4b961f-c949-46c2-8e5d-3cfbc8b125bf",
+    '    "elementId": 25431,
+    '    "statusId": 3,
+    '    "isMitigatedBySecurityControl": false,
+    '    "canBeMitigatedBySecurityControlId": 0
+    '}
 
-Public Class tmInnerModel6
-    Public id As Integer
-    Public name As String
+    Public id As Long
+    Public threatName$
+    Public sourceName$ 'the diagram element responsible for this threat
+    Public sourceDisplayName$
+    Public actualRiskId As Integer
+    Public threatId As Integer
+    Public projectId As Integer
+    Public projectGuid$
+    ' actualrisk object
+    Public actualRiskName$
+    Public statusName$
+    ' type is always 0
+    Public sourceType$ 'usually/always Node
+    Public componentId As Integer
+    Public componentName$
+    Public imagePath$
+    Public threatGuid$
+    Public elementId As Long ' copy of sourceId
+    Public statusId As Integer ' coincides with statusName 
+    Public isMitigatedBySecurityControl As Boolean
+    Public canBeMitigatedBySecurityControlId As Integer
+
+
 End Class
+
+Public Class tm6SRsOfModel
+    '      {
+    '                "id": 610032,
+    '                "projectId": 2220,
+    '                "projectGuid": "1527b361-0f8f-4bad-a8c5-817eae2a04ad",
+    '                "projectName": "API Testing",
+    '                "securityRequirementId": 2257,
+    '                "securityRequirementGuid": "4FF9A3CF-F2F7-4E51-B200-5698D08217F6",
+    '                "securityRequirementName": "Applications that handle highly sensitive information should consider disabling copy and paste functionality",
+    '                "projectSecurityRequirementId": 271931,
+    '                "elementId": 25431,
+    '                "elementName": "Web Service",
+    '                "elementDisplayName": "Web Service",
+    '                "isImplemented": false,
+    '                "isOptional": false,
+    '                "sourceId": 52,
+    '                "sourceType": "Threats",
+    '                "sourceName": "Collect Data from Common Resource Locations",
+    '                "statusId": 4,
+    '                "statusName": "Open",
+    '                "projectSecurityRequirementStatusId": 4,
+    '                "projectSecurityRequirementStatusName": "Open",
+    '                "componentId": 248,
+    '                "componentName": "Web Service",
+    ''                "componentTypeId": 3,
+    '                "componentTypeName": "Component",
+    '                "imagePath": "/ComponentImage/webservice.png",
+    '                "diagramNodeThreatId": 164436,
+    '                "type": 0,
+    '                "canBeMitigatedBySecurityControlId": 0,
+    '                "diagramNodeSecurityRequirementStatusId": 4,
+    '                "diagramNodeSecurityRequirementStatusName": "Open"
+    '            }
+    Public id As Long
+    Public projectId As Integer
+    Public projectGuid$
+    Public projectName$
+    Public securityRequirementId As Integer
+    Public securityRequirementGuid$
+    Public securityRequirementName$
+    Public projectSecurityRequirementId As Long
+    Public elementId As Long
+    Public elementName$
+    Public isImplemented As Boolean
+    Public isOptional As Boolean
+    Public sourceId As Integer ' the library ID of the source of this
+    Public sourceType$   ' could be Properties, Threats, Node
+    Public sourceName$
+    Public statusId As Integer
+    Public statusName$
+    Public projectSecurityRequirementStatusId As Integer
+    Public projectSecurityRequirementStatusName$
+    Public componentId As Integer
+    Public componentName$
+    Public componentTypeId As Integer
+    Public componentTypeName$
+    Public imagePath$
+    Public diagramNodeThreatId As Long
+
+    ' skipping last 4 - duplicates or useless?
+
+
+End Class
+
+Public Class tm6NodesOfModel
+    ' category types include component,container,trustboundary,project(nested),collection
+    ' Field highlights how object is represented.. Protocols displayed as "linkDataArray" collection
+    ' most of this unusable
+    '    "nodeDataArray" [
+    '                {
+    '                    "Id": 25383,
+    '                    "key": -18,
+    '                    "category": "Component",
+    '                    "Name": "Home",
+    '                    "type": "Group",
+    '                    "ImageURI": "/ComponentImage/home.png",
+    '                    "NodeId": 34,
+    '                    "ComponentId": 34,
+    '                    "group": null,
+    '                    "Location": "-266 -106",
+    '                    "color": null,
+    '                    "BorderColor": "black",
+    '                    "BackgroundColor": "white",
+    '                    "TitleColor": "black",
+    '                    "TitleBackgroundColor": null,
+    '                    "isGroup": true,
+    '                    "isGraphExpanded": false,
+    '                    "FullName": "Home",
+    '                    "LocationX": null,
+    '                    "LocationY": null,
+    '                    "cpeid": null,
+    '                    "networkComponentId": null,
+    '                    "BorderThickness": 1.0,
+    '                    "AllowMove": true,
+    '                    "LayoutWidth": null,
+    '                    "LayoutHeight": null,
+    '                    "guid": "",
+    '                    "AWS_Id": null,
+    '                    "ExternalResourceId": null,
+    '                    "ExternalResourceARN": null,
+    '                    "ResourceType": null,
+    '                    "IsSystem": false,
+    '                    "SecurityGroups": null,
+    '                    "Components": null,
+    '                    "DataElements": null,
+    '                    "Roles": null,
+    '                    "Widgets": null,
+    '                    "Properties": null,
+    '                    "ThreatsCount": 0,
+    '                    "SecurityRequirementsCount": 0,
+    '                    "LibraryId": 0,
+    '                    "ComponentTypeId": 0,
+    '                    "ComponentTypeName": "Component",
+    '                    "Labels": null,
+    '                    "ComponentName": "Home",
+    '                    "ComponentGuid": "4c7f9883-638e-4e1d-b2f3-63cd74620e2a",
+    '                    "BucketPolicy": null,
+    '                    "EncryptionEnabled": false,
+    '                    "PubliclyAccessible": false,
+    '                    "LogsEnabled": false,
+    '                    "VersionEnabled": false,
+    '                    "MfaDeleteEnabled": false,
+    '                    "ObjectLockEnabled": false,
+    '                    "RoleName": null,
+    '                    "Policies": null,
+    '                    "InstanceStopped": false,
+    '                    "Tags": null,
+    '                    "Notes": null,
+    '                    "isImportThreats": false,
+    '                    "isHighValueTarget": false,
+    '                    "isProtectedResource": false,
+    '                    "IsNode": true,
+    '                    "ProjectId": null
+    '                }
+
+    ' usable fields
+    '    {
+    '                    "Id": 25430,
+    '               '     "key": -878,
+    '                    "category": "Component",
+    '                    "Name": "My Web Service",
+    '                    "ImageURI": "/ComponentImage/webservice.png",
+    '                    "NodeId": 3759,
+    '                    "ComponentId": 3759,                 
+    '                    "FullName": "Custom Name",
+    '                    "ComponentTypeName": "Component",
+    '                    "ComponentName": "My Web Service",
+    '                    "ComponentGuid": "61f9d2ac-c7a7-4118-b27d-d7f71323f2ac",
+    '                 }
+
+    Public Id As Long ' ID is unique across all threat models  
+    Public category$ ' component,container,trustboundary,project(nested),collection
+    Public Name$
+    Public ImageURI$
+    Public NodeId? As Integer
+    Public FullName$
+    Public ComponentTypeName$ ' component, protocol, securitycontrol, trustboundary
+    Public ComponentGuid$
+End Class
+
 Public Class tmProjInfoShort6
     '       "name": "Test-Yash-1",
     '            "id" 2069,
@@ -3946,10 +4680,36 @@ Public Class tm6Component
             For Each O In A.options
                 If O.threats.Count > maxOption Then maxOption = O.threats.Count
             Next
-skipProp:
             maxTH += maxOption
+skipProp:
         Next
     End Function
+
+    Public Function numAttrTH(Optional ByVal localOnly As Boolean = True) As Integer
+        numAttrTH = 0
+        For Each A In classDef.properties
+            If A.isGlobal = True And localOnly = True Then GoTo skipProp
+            For Each O In A.options
+                numAttrTH += O.threats.Count
+            Next
+skipProp:
+        Next
+    End Function
+
+    Public Function numAttrSR(Optional ByVal localOnly As Boolean = True) As Integer
+        numAttrSR = 0
+        For Each A In classDef.properties
+            If A.isGlobal = True And localOnly = True Then GoTo skipProp
+            For Each O In A.options
+                For Each T In O.threats
+                    numAttrSR += T.securityRequirements.Count
+                Next
+            Next
+skipProp:
+        Next
+    End Function
+
+
     Public Function maxSR() As Integer
         maxSR = numTL_SR() + numDirectSRs()
 
@@ -3962,8 +4722,8 @@ skipProp:
                 Next
             Next
             maxSR += maxOption
-        Next
 skipProp:
+        Next
 
     End Function
     Public Sub New()

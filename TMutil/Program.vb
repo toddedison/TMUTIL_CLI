@@ -31,9 +31,9 @@ Module Program
                     Console.WriteLine("You must provide an API key if you are not going to provide a UN/PW")
                     End
                 End If
-            Else
-                Console.WriteLine("Must provide all 3 arguments for 5.5 (FQDN, UN and PW) or 2 for 6 (FQDN, APIKEY)")
-                End
+                'Else
+                '    Console.WriteLine("Must provide all 3 arguments for 5.5 (FQDN, UN and PW) or 2 for 6 (FQDN, APIKEY)")
+                '    End
             End If
 
             If Len(apiKey) Then
@@ -135,6 +135,11 @@ skipIt:
                 Next
 
                 If Len(fileN) Then FileClose(FF)
+                End
+
+
+            Case "proj_report"
+                Call projRpt6(args)
                 End
 
             Case "add_model_access"
@@ -416,6 +421,10 @@ doneLoop:
                 Call createMatildaModel(fileN, modelName, inspectOnly)
                 End
 
+            Case "ronnie_import_comp"
+                Call loadFramework()
+                Call ronnieImport(args)
+                End
 
             Case "csvmodel"
                 Console.WriteLine("CSV Import File must include the following fields, in this order (recommend saving from Excel) : " + vbCrLf + "ObjectId,ObjectName,Display Name,ObjectType,ParentGroupId,OutboundId,OutboundProtocols,Notes" + vbCrLf)
@@ -506,6 +515,11 @@ doneLoop:
                 Dim modelName$ = argValue("modelname", args)
                 If modelName = "" Then
                     Console.WriteLine("You must provide a name for the Model using --MODELNAME (name)")
+                    End
+                End If
+
+                If T.isTMsix = True Then
+                    Call submitkis6(args)
                     End
                 End If
 
@@ -863,6 +877,12 @@ skipMeLabel:
 
 
             Case "get_threats", "get_threat"
+                If T.isTMsix = True Then
+                    Call threats60(args)
+                    End
+                End If
+
+
                 Dim R As New tfRequest
 
                 With R
@@ -4767,6 +4787,14 @@ nextItem3:
                 Call i2i_AllCompCompare60(args)
                 End
 
+            Case "allcomps_report"
+                Call componentRPT(args)
+                End
+
+            Case "show_comp6"
+                Call show_comp6(args)
+                End
+
 
         End Select
         Dim K As Integer
@@ -4881,11 +4909,114 @@ nextItem3:
         Console.WriteLine("Throwing object of " + (allActivities.Count * 6).ToString + " elements at Excel..")
         rAR.booL1 = True ' create XLS not CSV
 
+        Console.WriteLine("The following " + unqEvent.Count.ToString + " unique events captured:")
+        For Each uN In unqEvent
+            Console.WriteLine(uN)
+        Next
         Call newRpt.dump2XLS(xls3d, allActivities.Count, rAR)
 
         End
     End Sub
+    Private Sub projRpt6(args() As String)
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6()
 
+        Dim doCSV As Boolean = False
+        Dim fileN$ = ""
+
+        If Len(argValue("file", args)) Then
+            doCSV = True
+            fileN = argValue("file", args)
+            safeKILL(fileN)
+            Console.WriteLine("Writing CSV file -> " + fileN)
+
+        End If
+
+        Dim FF As Integer
+
+        If doCSV Then
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Node Name,Display Name,Threat,T-Status,Requirement,SR-Status" + vbCrLf)
+        End If
+
+        Dim modelName$ = argValue("project", args)
+        If Len(modelName) = 0 Then
+            Console.WriteLine("Must provide diagram name using parameter --PROJECT")
+            End
+        End If
+
+        Dim guiD$ = ""
+
+        For Each proJ In PP
+            If LCase(proJ.name) = LCase(modelName) Then
+                guiD = proJ.guid
+                modelName = proJ.name
+                Exit For
+            End If
+        Next
+
+        If Len(guiD) = 0 Then
+            Console.WriteLine("Unable to find the project --PROJECT " + modelName)
+            End
+        End If
+
+        Dim allNodes As List(Of tm6NodesOfModel) = T.getNodesOfProject6(guiD)
+        Dim allThreats As List(Of tm6ThreatsOfModel) = T.getThreatsOfProject6(guiD)
+        Dim allSRs As List(Of tm6SRsOfModel) = T.getSRsOfProject6(guiD)
+
+        Console.WriteLine("Project:         " + modelName)
+        Console.WriteLine("# Threats:       " + allThreats.Count.ToString)
+        Console.WriteLine("# Requirements:  " + allSRs.Count.ToString)
+
+        Dim currC$ = ""
+        Dim currT$ = ""
+        Dim currSR$ = ""
+        Dim linE$ = ""
+
+        For Each nO In allNodes
+            currC = qT(nO.Name) + "," + qT(nO.FullName) + ","
+            linE = currC
+
+            ' direct SRs first
+            For Each sR In allSRs
+                If sR.sourceType = "Node" And sR.sourceName = nO.Name Then
+                    Console.WriteLine(linE + ",," + qT(sR.securityRequirementName) + "," + qT(sR.statusName))
+                    If doCSV Then Print(FF, linE + ",," + qT(sR.securityRequirementName) + "," + qT(sR.statusName) + vbCrLf)
+                End If
+            Next
+
+            For Each tH In allThreats
+                Dim noSRs As Boolean = True
+                Dim noTHs As Boolean = True
+
+                currT = qT(tH.threatName) + "," + qT(tH.statusName) + ","
+                If tH.elementId = nO.Id Then
+                    noTHs = False
+                    linE = currC + currT
+                End If
+
+                For Each sR In allSRs
+                    If sR.sourceType = "Node" Then GoTo skipSR
+                    If sR.sourceName = tH.threatName And sR.componentName = nO.Name Then
+                        noSRs = False
+                        currSR = qT(sR.securityRequirementName) + "," + qT(sR.statusName)
+                        Console.WriteLine(linE + currSR)
+                        If doCSV Then Print(FF, linE + currSR + vbCrLf)
+                    End If
+skipSR:
+                Next
+                If noSRs = True And noTHs = False Then
+                    Console.WriteLine(linE + ",,")
+                    If doCSV Then Print(FF, linE + ",," + vbCrLf)
+                End If
+            Next
+        Next
+
+        If doCSV = True Then
+            FileClose(FF)
+        End If
+    End Sub
     Private Sub getProj6(args() As String)
 
         Dim PP As List(Of tmProjInfoShort6)
@@ -6063,9 +6194,12 @@ nope:
         ' Threats of Attributes
         ' SRs of Threats of Attributes
 
-        Dim destC As tmComponent
+        Dim forceNewComp As Boolean = False
+        forceNewComp = True
 
-        destC = T2.bestMatch(C)      '( T2.guidCOMP(C.Guid.ToString)
+        Dim destC As tmComponent = New tmComponent
+
+        If forceNewComp = False Then destC = T2.bestMatch(C)      '( T2.guidCOMP(C.Guid.ToString)
 
         Dim targetID As Integer = 0
         targetID = destC.Id
@@ -8489,6 +8623,20 @@ skipUserLoop:
     ' ---------------------------------------------------------------------------------------------
     ' ---------------------------------------------------------------------------------------------
 
+    Public Sub loadFramework(Optional ByVal loadATTR As Boolean = False, Optional ByVal showWritelines As Boolean = True)
+        If showWritelines = True Then Console.WriteLine("Loading Threat Framework Objects..")
+        Call loadNTY(T, "Components")
+        If showWritelines = True Then Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        Call loadNTY(T, "Threats")
+        If showWritelines = True Then Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        Call loadNTY(T, "SecurityRequirements")
+        If showWritelines = True Then Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString)
+        If loadATTR = True Then
+            Call loadNTY(T, "Attributes")
+            If showWritelines = True Then Console.WriteLine("Attributes  : " + T.lib_AT6.Count.ToString)
+        End If
+
+    End Sub
 
     Public Sub usageReport6(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
         Dim doCSV As Boolean = False
@@ -8498,12 +8646,7 @@ skipUserLoop:
             doCSV = True
         End If
 
-
-
-
-
         Exit Sub
-
         'orig function below
         '
 
@@ -8719,6 +8862,206 @@ notThisModel:
         Console.WriteLine("Most Created:               " + mostDiaAuthor + " created " + mostDiagrams.ToString + " models")
         Console.WriteLine("# Users with No Models:     " + numNoModels.ToString)
 
+
+    End Sub
+
+
+    Private Sub ronnieImport(args() As String)
+        Dim fileN$ = argValue("file", args)
+        If fileN = "" Then
+            Console.WriteLine("You must include a --FILE parameter containing JSON payload")
+        End If
+
+        Dim splitControls As Boolean = False
+        If LCase(argValue("split_controls", args)) = "true" Then splitControls = True
+
+        Dim issueS As List(Of ronnieIssue)
+        issueS = T.getRonnieIssues(fileN)
+
+        Console.WriteLine(vbCrLf + "Scanning issues and adding objects as necessary..")
+        Call addMissingObjects(issueS, splitControls)
+
+        Console.WriteLine(vbCrLf + "Refreshing Framework objects..")
+        Call loadFramework(, False)
+
+        Console.WriteLine(vbCrLf + "Building component structures..")
+        For Each issue In issueS
+            For Each agent In issue.getAgentModels
+                Dim compPayload As compStructurePayload = buildRonnieCompStructure(issue, agent.name, splitControls)
+                Console.WriteLine("Adding Component Structure for Agent '" + agent.name + "': " + T.addComponentStructure(compPayload))
+            Next
+        Next
+    End Sub
+
+    Private Function buildRonnieCompStructure(ByRef issuE As ronnieIssue, agentName$, splitControls As Boolean) As compStructurePayload
+        Dim comP As compStructurePayload = New compStructurePayload
+
+        For Each agent In issuE.getAgentModels
+            If agent.name = agentName Then
+                ' build Threat & SR structure on this Threat Agent component
+                comP.Id = T.lib_Comps6(T.ndxCompbyName(agent.name)).id
+
+                'add Threat (currently 1 threat per issue)
+                Dim allThreats As List(Of entityModelThreat) = issuE.getThreatModels
+                Dim allControls As List(Of entityModelSR) = issuE.getSReqModels(splitControls)
+
+                For Each threaT In allThreats
+                    Dim newT As threatStructurePayload = New threatStructurePayload
+                    newT.Id = T.lib_TH6(T.ndxTHbyName(threaT.name)).id
+                    For Each sR In allControls
+                        Dim newSR As srStructurePayload = New srStructurePayload
+                        newSR.Id = T.lib_SR6(T.ndxSRbyName(sR.name)).id
+                        newT.securityRequirements.Add(newSR)
+                    Next
+                    comP.threats.Add(newT)
+                Next
+            End If
+        Next
+        Return comp
+
+    End Function
+    Private Sub addMissingObjects(issueS As List(Of ronnieIssue), splitControls As Boolean)
+        For Each issuE In issueS
+            With issuE
+                Console.WriteLine(vbCrLf + "Issue ID " + .ID.ToString + ": " + vbCrLf + "# of Threat Agents: " + .getThreatAgents.Count.ToString + vbCrLf + "Threat Name       : 1" + vbCrLf + "# of Controls/SRs : " + .getControls.Count.ToString)
+
+                ' Pull ronnieClass Threat Framework models for Components, Threats, Requirements to see if they exist - adding as necessary 
+
+
+                ' AGENTS = COMPONENTS - structure of Threat(s)/Requirement(s) to be built for each Component
+
+                Dim allAgents As List(Of entityModelComp) = issuE.getAgentModels
+                Dim newAgents As List(Of entityModelComp) = New List(Of entityModelComp)
+
+                For Each agenT In allAgents
+                    Dim agentID As Integer = T.ndxCompbyName(agenT.name)
+                    If agentID = -1 Then
+                        newAgents.Add(agenT)
+                        Console.WriteLine("Adding Threat Agent as Component: " + agenT.name)
+                    Else
+                        Console.WriteLine("Threat Agent " + agenT.name + " already exists as Component ID " + agentID.ToString)
+                    End If
+                Next agenT
+
+                'add new component(s) as necessary
+                If newAgents.Count > 0 Then
+                    Console.WriteLine("Added Comp IDs: " + T.addComps60(newAgents))
+                End If
+
+
+                ' THREATS - Currently not split but represents collection of Threat Objects, Attack Vectors, etc
+
+                Dim allThreats As List(Of entityModelThreat) = issuE.getThreatModels
+                Dim newThreats As List(Of entityModelThreat) = New List(Of entityModelThreat)
+
+                For Each threaT In allThreats
+                    Dim threatID As Integer = T.ndxTHbyName(threaT.name)
+                    If threatID = -1 Then
+                        'here add the threat
+                        newThreats.Add(threaT)
+                        Console.WriteLine("Adding Attack Vector(s) as Threat: " + threaT.name)
+                    Else
+                        'threat already exists
+                        Console.WriteLine("Threat '" + threaT.name + "' already exists as Threat ID " + threatID.ToString)
+                    End If
+                Next threaT
+
+                'add new threat(s) as necessary
+                If newThreats.Count > 0 Then
+                    Console.WriteLine("New threat(s) added - IDs: " + T.addThreats60(newThreats))
+                End If
+
+                ' SECURITY REQUIREMENT(S) - split parameter determines if single SR is created or if multiple for each Control
+
+                Dim allSRs As List(Of entityModelSR) = issuE.getSReqModels(splitControls)
+                Dim newSRs As List(Of entityModelSR) = New List(Of entityModelSR)
+
+                For Each sR In allSRs
+                    Dim srID As Integer = T.ndxSRbyName(sR.name)
+
+                    If srID = -1 Then
+                        newSRs.Add(sR)
+                        Console.WriteLine("Adding Control as SR: " + sR.name)
+                    Else
+                        Console.WriteLine("Control/Requirement already exists: " + sR.name)
+                    End If
+                Next sR
+
+                If newSRs.Count > 0 Then
+                    Console.WriteLine("New SR IDs: " + T.addSRs60(newSRs))
+                End If
+            End With
+        Next issuE
+
+    End Sub
+
+
+
+
+
+
+
+
+    Private Sub threats60(ByVal args() As String)
+
+        Console.WriteLine("Loading Threats & Libraries")
+        Call loadNTY(T, "Threats")
+
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+
+        T.librarieS = T.getLibsSIX
+
+        Dim srchS$ = argValue("search", args)
+        If Len(srchS) Then srchS = LCase(srchS)
+
+        Dim numItems As Integer = 0
+
+        Dim doCSV As Boolean
+        Dim fileN$ = argValue("file", args)
+            Dim FF As Integer
+
+            If Len(fileN) Then
+                doCSV = True
+                safeKILL(fileN)
+                FF = FreeFile()
+                Console.WriteLine("Writing to CSV File: " + fileN)
+                FileOpen(FF, fileN, OpenMode.Output)
+                Print(FF, "Library,Name,ID,Risk,Labels" + vbCrLf)
+            End If
+
+            Dim qq$ = Chr(34)
+
+
+        For Each P In T.lib_TH6
+            If Len(srchS) Then
+                If InStr(LCase(P.labels), srchS) Then GoTo showTH
+                If InStr(LCase(P.name), srchS) Then GoTo showTH
+                'If InStr(LCase(P.Description), srchS) Then GoTo showTH
+                GoTo skipTH
+            End If
+showTH:
+            Dim libNDX As Integer = T.ndxLib(P.libraryId)
+            Dim lName$ = ""
+            If libNDX <> -1 Then lName$ = T.librarieS(libNDX).Name
+
+            lName += " [" + P.libraryId.ToString + "]"
+            lName += spaces(30 - Len(lName))
+
+            Dim idSt$ = "[" + P.id.ToString + "]"
+
+            Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+            If doCSV Then
+                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + vbCrLf)
+            End If
+            numItems += 1
+skipTH:
+        Next
+        Console.WriteLine("# of items in this list: " + numItems.ToString)
+            If doCSV Then
+                FileClose(FF)
+            End If
+            End
 
     End Sub
 
@@ -9022,6 +9365,33 @@ skipBlankLabel2:
     End Function
 
 
+    Private Sub submitkis6(args() As String)
+        Dim modelName$ = argValue("modelname", args)
+
+        Dim modelNum$ = "" ' As Integer
+        Dim result2$ = T.createKISSmodelForImport(modelName)
+        modelNum = result2
+        If modelNum = "" Or InStr(modelNum, "ERROR") > 0 Then
+            Console.WriteLine("Unable to create project - " + result2)
+            End
+        End If
+
+        Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+        Dim fileN$ = argValue("file", args)
+        If Dir(fileN) = "" Then
+            Console.WriteLine("file does not exist " + fileN)
+        End If
+
+        Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
+        If Mid(resP, 1, 5) = "ERROR" Then
+            Console.WriteLine(resP)
+        Else
+            Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+        End If
+        End
+
+    End Sub
 
     Private Sub csv2Model(modelName$, fileN$)
         ' this is 6.0 version
@@ -9058,6 +9428,149 @@ skipBlankLabel2:
             Console.WriteLine(T.tmFQDN + "/threatmodeldiagram/" + modelNum.ToString)
         End If
         End
+    End Sub
+
+    Private Sub show_comp6(ByVal args() As String)
+
+        Call loadNTY(T, "Components")
+        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        'Call loadNTY(T, "Threats")
+        'Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        'Call loadNTY(T, "SecurityRequirements")
+        'Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString)
+
+        T.librarieS = T.getLibsSIX
+        Console.WriteLine("Libraries     : " + T.librarieS.Count.ToString)
+
+
+        Dim fileN$ = argValue("file", args)
+        Dim doCSV As Boolean = False
+        Dim FF As Integer = 0
+
+        If Len(fileN) Then
+            Console.WriteLine("Creating CSV @ " + fileN)
+            doCSV = True
+            Call safeKILL(fileN)
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Dim hLine$ = "Library,Component,CompID,Comp_Type" '#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR"
+
+            Print(FF, hLine + vbCrLf)
+        End If
+
+        For Each C In T.lib_Comps6
+            Dim libNDX As Integer = -1
+            libNDX = T.ndxLib(C.libraryId)
+            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) ' + "," + Len(C.description).ToString
+            If doCSV = True Then Print(FF, fLine + vbCrLf)
+            Console.WriteLine(fLine)
+        Next
+
+        If doCSV = True Then
+            FileClose(FF)
+        End If
+    End Sub
+    Private Sub componentRPT(ByVal args() As String)
+        Console.WriteLine("Loading components, threats, requirements, attributes, libraries..")
+        Console.WriteLine(vbCrLf)
+
+        Call loadNTY(T, "Components")
+        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        Call loadNTY(T, "Threats")
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        Call loadNTY(T, "SecurityRequirements")
+        Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString)
+        Call loadNTY(T, "Attributes")
+        Console.WriteLine("Attributes    : " + T.lib_AT6.Count.ToString)
+
+        T.librarieS = T.getLibsSIX
+        Console.WriteLine("Libraries     : " + T.librarieS.Count.ToString)
+
+        Dim confirmOBJ As Boolean = False
+        If LCase(argValue("validate", args)) = "true" Then
+            Console.WriteLine("Will confirm all CATS objects exist")
+            confirmOBJ = True
+        End If
+
+
+        Dim fileN$ = argValue("file", args)
+        Dim doCSV As Boolean = False
+        Dim FF As Integer = 0
+
+        If Len(fileN) Then
+            Console.WriteLine("Creating CSV @ " + fileN)
+            doCSV = True
+            Call safeKILL(fileN)
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Dim hLine$ = "Library,Component,CompID,Comp_Type,#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR,#_COMP,#_UNDEF,DESC_LEN"
+            If confirmOBJ = True Then hLine += ",MISSING"
+
+            Print(FF, hLine + vbCrLf)
+        End If
+
+        For Each C In T.lib_Comps6
+            Call T.getTF6CompDef(C)  ' T.getTF6CompDef(T.guidCOMP6(matchGUID))
+            Dim missinG$ = ""
+            Dim libNDX As Integer = -1
+            libNDX = T.ndxLib(C.libraryId)
+
+            If confirmOBJ = False Then GoTo skipConfirmation
+
+            With C.classDef
+                For Each tH In .threats
+                    Dim tNDX As Integer = T.ndxTHlib(tH.id)
+                    If tNDX = -1 Then missinG += "Threat " + tH.id.ToString + ","
+                    For Each sR In tH.securityRequirements
+                        Dim sNDX As Integer = T.ndxSRlib(sR.id)
+                        If sNDX = -1 Then missinG += "TH" + tH.id.ToString + "/SR " + sR.id.ToString + ","
+                    Next
+                Next
+
+                For Each sR In .securityRequirements
+                    Dim sNDX As Integer = T.ndxSRlib(sR.id)
+                    If sNDX = -1 Then missinG += "DirSR " + sR.id.ToString + ","
+                Next
+
+                For Each aT In .properties
+                    Dim aNDX As Integer = T.ndxATTR(aT.id)
+                    If aNDX = -1 Then missinG += "ATTR " + aT.id.ToString + ","
+                    For Each oP In aT.options
+                        For Each tH In oP.threats
+                            Dim tNDX As Integer = T.ndxTHlib(tH.id)
+                            If tNDX = -1 Then missinG += "AT" + aT.id.ToString + "/Threat " + tH.id.ToString + ","
+                            For Each sR In tH.securityRequirements
+                                Dim sNDX As Integer = T.ndxSRlib(sR.id)
+                                If sNDX = -1 Then missinG += "AT" + aT.id.ToString + "/TH" + tH.id.ToString + "/SR " + sR.id.ToString + ","
+                            Next
+                        Next
+                    Next
+                Next
+
+            End With
+
+skipconfirmation:
+
+            'get description
+            Dim desC$ = ""
+            desC = T.getTF6SingleComp(C.id).description
+
+            If Len(missinG) Then missinG = Mid(missinG, 1, Len(missinG) - 1)
+
+            Dim wLine$ = C.name + " [" + C.id.ToString + "] - DIR TH/SRs: " + C.numThreats.ToString + "/" + C.numDirectSRs.ToString + " - TH SRs: " + C.unqTL_SR.ToString + " - LOCAL_ATTR: " + C.numATTR(True).ToString + " - LOC_ATTR TH/SRs: " + C.numAttrTH.ToString + "/" + C.numAttrSR.ToString + " - DESC: " + Len(desC).ToString
+            If Len(missinG) Then wLine += " - MISSING: " + missinG
+
+            Console.WriteLine(wLine)
+
+            Dim undefineD As Integer = 0
+            If C.numThreats + C.unqTL_SR + C.numDirectSRs + C.numATTR = 0 Then undefineD = 1
+
+            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) + "," + C.numThreats.ToString + "," + C.unqTL_SR.ToString + "," + C.numDirectSRs.ToString + "," + C.numATTR(True).ToString + "," + C.numAttrTH(True).ToString + "," + C.numAttrSR(True).ToString + ",1," + undefineD.ToString + "," + Len(desC).ToString
+            If confirmOBJ = True Then fLine += "," + missinG
+
+            Print(FF, fLine + vbCrLf)
+        Next
+
     End Sub
 
 
@@ -9563,6 +10076,11 @@ skipThisOne3:
         Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
+        Console.WriteLine(fLine("ronnie_import_comp", "Adds components to Threat Framework based on custom JSON format, OPTIONAL --FILE (json filename)"))
+        Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename)"))
+        Console.WriteLine(fLine("activity_report", "Opens Excel/XLS file highlighting usage across all Projects"))
+        Console.WriteLine(fLine("allcomps_report", "High-level details of each component, OPT arg: --FILE filename.csv, --VALIDATE if true, confirms integrity of each comp"))
+        Console.WriteLine(fLine("show_comp6", "Returns list of Components, OPT args:--LIB (library name),--FILE (csv filename)")) ',--SHOWUSAGE true, --LIBSONLY true"))
 
     End Sub
 

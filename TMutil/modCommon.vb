@@ -473,6 +473,20 @@ dontEvalCase:
         Next
     End Function
 
+    Public Function COLLtoCSV(ByRef C As Collection, Optional ByVal includeQT As Boolean = False) As String
+        Dim q$ = ""
+        If includeQT = True Then q = Chr(34)
+
+        COLLtoCSV = ""
+
+        For Each cItem In C
+            COLLtoCSV += q + cItem + q + ","
+        Next
+
+        COLLtoCSV = Mid(COLLtoCSV, 1, Len(COLLtoCSV) - 1)
+    End Function
+
+
     Public Function CSVtoCOLL(ByRef csV$) As Collection
         CSVtoCOLL = New Collection
 
