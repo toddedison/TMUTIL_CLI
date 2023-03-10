@@ -155,7 +155,7 @@ Public Class TM_Client
 
 
     End Function
-    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False, Optional ByVal addFileN$ = "", Optional ByVal thisIsPATCH As Boolean = False) As String
+    Private Function getAPIData(ByVal urI$, Optional ByVal usePOST As Boolean = False, Optional ByVal addJSONbody$ = "", Optional ByVal addingComp As Boolean = False, Optional ByVal addFileN$ = "", Optional ByVal thisIsPATCH As Boolean = False, Optional ByVal thisIsPUT As Boolean = False) As String
         getAPIData = ""
         If isConnected = False Then Exit Function
 
@@ -163,20 +163,20 @@ Public Class TM_Client
 
         Dim client = New RestClient(tmFQDN + urI)
         Dim request As RestRequest
-        If usePOST = False Then
+
+        If thisIsPUT = False And thisIsPATCH = False And usePOST = False Then
             request = New RestRequest(Method.GET)
         Else
-            If thisIsPATCH = False Then
-                request = New RestRequest(Method.POST)
-            Else
-                request = New RestRequest(Method.PATCH)
-            End If
+            If usePOST = True Then request = New RestRequest(Method.POST)
+            If thisIsPATCH = True Then request = New RestRequest(Method.PATCH)
+            If thisIsPUT = True Then request = New RestRequest(Method.PUT)
         End If
 
         If debugInfo Then
             Dim gOrP$ = "GET"
             If usePOST Then gOrP = "POST"
             If thisIsPATCH Then gOrP = "PATCH"
+            If thisIsPUT Then gOrP = "PUT"
             Console.WriteLine(vbCrLf + "------API CALL------" + vbCrLf + gOrP + ": " + tmFQDN + urI)
             'If usePOST Then Console.WriteLine("JSON Body: " + addJSONbody)
         End If
@@ -229,7 +229,7 @@ Public Class TM_Client
 
         response = client.Execute(request)
 
-        If addingComp Then
+        If addingComp Or thisIsPUT Then
             Return response.Content
         End If
 
@@ -1452,6 +1452,47 @@ is6:
 
 
     End Function
+
+
+    Public Function editThreat6(threaT As List(Of tm6Threat)) As Boolean
+        editThreat6 = False
+
+        Dim P As editEntityTH6 = New editEntityTH6
+
+        P.entityTypeName = "Threat"
+
+        Dim newTlist As List(Of editModelTH6) = New List(Of editModelTH6)
+
+        Dim newT As editModelTH6
+
+        For Each tH In threaT
+            newT = New editModelTH6
+            newT.id = tH.id
+            newT.description = tH.description
+            newT.guid = tH.guid
+            newT.labels = tH.labels
+            newT.isHidden = tH.isHidden
+            newT.libraryId = tH.libraryId
+            newT.name = tH.name
+            newT.riskId = tH.riskId
+            newTlist.Add(newT)
+        Next
+
+        Dim model$ = JsonConvert.SerializeObject(newTlist)
+        P.Model = model
+        Dim jBody$ = JsonConvert.SerializeObject(P)
+        Dim json$ = getAPIData("/api/library/updaterecords",, jBody,,,, True)
+
+        If InStr(json, "error") > 0 Then
+            Console.WriteLine(json)
+            Return False
+        End If
+
+        editThreat6 = True
+
+    End Function
+
+
 
     Public Function editCOMP(C As tmComponent, Optional actioNtypE$ = "TF_COMPONENT_UPDATED", Optional overrideLIB As Integer = 0, Optional overrideCTYPE As Integer = 0, Optional overrideCTname$ = "") As Boolean
         editCOMP = False
@@ -3233,6 +3274,29 @@ Public Class addCompClass
 
 End Class
 
+
+Public Class editEntityTH6
+    Public EntityTypeName As String
+    Public Model As String ' List(Of editModelTH6)
+    Public Sub New()
+        EntityTypeName = "Threat"
+        Model = ""
+    End Sub
+
+End Class
+
+Public Class editModelTH6
+    '[{\"id\":2438,\"name\":\"Custom Threat\",\"description\":\"\",\"riskId\":1,\"libraryId\":10,\"guid\":\"9fac0c84-7d4e-4e15-a989-426901042460\",\"labels\":\"New Tag\",\"isHidden\":false}]
+    Public id As Integer
+    Public name As String
+    Public description As String
+    Public riskId As Integer
+    Public libraryId As Integer
+    Public guid As String
+    Public labels As String
+    Public isHidden As Boolean
+End Class
+
 Public Class editEntityTH
     Public LibraryId As Integer
     Public EntityType$
@@ -4064,6 +4128,8 @@ Public Class tmProjActivity6
     End Sub
 End Class
 
+
+
 Public Class tm6ThreatsOfModel
     '{
     '    "id": 170004,
@@ -4619,7 +4685,14 @@ Public Class tmOptions
         '        Threats = New List(Of tmProjThreat)
     End Sub
 End Class
-
+Public Class tm6TF
+    Public componentS As List(Of tm6Component)
+    Public securityRequirements As List(Of tm6SecReq)
+    Public threatS As List(Of tm6Threat)
+    ' public testCases as list(of tm6t)
+    Public attributeS As List(Of tm6Attribute)
+    Public optionS As List(Of tm6Options)
+End Class
 Public Class tm6Component
     Public id As Long
     Public name As String

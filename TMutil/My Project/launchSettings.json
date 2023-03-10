@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "allcomps_report --file 20230216_tmsit.csv"
+      "commandLineArgs": "capec_labels --file capec.json --makechanges true"
     }
   }
 }

@@ -80,6 +80,14 @@ Module Program
         Dim GRP As List(Of tmGroups)
 
         Select Case LCase(actionWord)
+          '  Case "tm7import"
+          '      Dim fileN$ = argValue("file", args)
+          '      Dim newTMT As tm7Import = New tm7Import(fileN)
+          '      Dim pauseMe As Integer
+          '      pauseMe = 1
+          '      End
+
+
             Case "compliance_csv"
                 Dim cFrameworks As List(Of complianceDetails) = T.getCompFrameworks
 
@@ -128,13 +136,17 @@ Module Program
                                 Next
                             End If
                         Else
-                                Console.WriteLine(col5CLI("", S.Name + " [" + S.Id.ToString + "]", S.Title, "   ", S.SecurityRequirements.Count.ToString))
+                            Console.WriteLine(col5CLI("", S.Name + " [" + S.Id.ToString + "]", S.Title, "   ", S.SecurityRequirements.Count.ToString))
                         End If
                     Next
 skipIt:
                 Next
 
                 If Len(fileN) Then FileClose(FF)
+                End
+
+            Case "find_default_comps"
+                Call findDefaultImages(args)
                 End
 
 
@@ -538,7 +550,7 @@ doneLoop:
                     Console.WriteLine("file does not exist " + fileN)
                 End If
 
-                Dim resP$ = T.importKISSmodel(fileN, modelNum.tostring)
+                Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
                 If Mid(resP, 1, 5) = "ERROR" Then
                     Console.WriteLine(resP)
                 Else
@@ -876,6 +888,10 @@ skipMeLabel:
                 End
 
 
+            Case "sahejthreatlabels"
+                Call sahejThreatLabels(args)
+                End
+
             Case "get_threats", "get_threat"
                 If T.isTMsix = True Then
                     Call threats60(args)
@@ -1005,6 +1021,11 @@ skipTH:
                 End If
 
             Case "get_sr"
+                If T.isTMsix = True Then
+                    Call srs60(args)
+                    End
+                End If
+
                 Dim R As New tfRequest
 
                 With R
@@ -3234,10 +3255,10 @@ nextTMP:
 
                     Dim sqL$ = ""
 
-                    sqL = tS.Json
+                    sqL = tS.json
 
                     Dim qq$ = Chr(34)
-                    Dim nIds As List(Of String) = jsonValues(tS.Json, "NodeId")
+                    Dim nIds As List(Of String) = jsonValues(tS.json, "NodeId")
                     Dim ndxNID As Integer = 0
                     Dim numErrors As Integer = 0
 
@@ -4412,7 +4433,7 @@ nextItem3:
                 End
 
             Case "find_dup_opts"
-                Call finddupOptions
+                Call findDupOptions()
                 End
 
             Case "activity_report"
@@ -4795,6 +4816,8 @@ nextItem3:
                 Call show_comp6(args)
                 End
 
+            Case "capec_labels"
+                Call capecLabels(args)
 
         End Select
         Dim K As Integer
@@ -4916,6 +4939,30 @@ nextItem3:
         Call newRpt.dump2XLS(xls3d, allActivities.Count, rAR)
 
         End
+    End Sub
+
+    Private Sub findDefaultImages(args() As String)
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6()
+
+        Dim unqNodes As Collection = New Collection
+
+        Dim projNUM As Integer = 0
+
+        For Each P In PP
+            Dim allNodes As List(Of tm6NodesOfModel) = T.getNodesOfProject6(P.guid)
+
+            For Each N In allNodes
+                If IsNothing(N.ImageURI) Then
+                    If grpNDX(unqNodes, N.Name) > 0 Then GoTo notNew
+
+                    unqNodes.Add(N.Name)
+                    Console.WriteLine("Project: " + P.name + " / " + P.guid + " Node: " + N.Name)
+notNew:
+                End If
+            Next
+skip:
+        Next
     End Sub
     Private Sub projRpt6(args() As String)
         Dim PP As List(Of tmProjInfoShort6)
@@ -7111,9 +7158,9 @@ skipDEPT2:
         matildaHostToRec = ""
         Select Case recommendedService
             Case "Azure Kubernetes Service (AKS)"
-                Return "Azure Kubernetes Service"
+                Return "Azure Kubernetes Cluster"
             Case "Azure CosmoDB(with MongoDB compatibility)"
-                Return "Azure Cosmos DB"
+                Return "Azure Cosmos DB Account"
         End Select
 
         ' if here, not a strict string search
@@ -7132,6 +7179,12 @@ skipDEPT2:
     End Function
 
     Public Sub createMatildaModel(fileN$, modelName$, Optional ByVal inspectOnly As Boolean = False)
+        If T.isTMsix = True Then
+
+            Call createMatildaModel6(fileN$, modelName$, inspectOnly)
+
+            End
+        End If
         Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
 
         Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
@@ -7184,18 +7237,18 @@ skipDEPT2:
                     serverLayer = True
 
                     Dim sLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
-                numLayers += 1
-                With sLayer
-                    .ParentGroupId = 0
-                    .ObjectId = currId
-                    currId += 1
-                    sLayerNDX = .ObjectId
+                    numLayers += 1
+                    With sLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        sLayerNDX = .ObjectId
                         .ObjectType = "Container"
                         .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
                         .Name = "Server Role"
-                End With
-                jsonObj.Add(sLayer)
-            End If
+                    End With
+                    jsonObj.Add(sLayer)
+                End If
             End If
 
             If M.serverType = "Infra" = True And infraLayer = False Then
@@ -7361,7 +7414,253 @@ skipDEPT2:
 
     End Sub
 
+    Public Sub createMatildaModel6(fileN$, modelName$, Optional ByVal inspectOnly As Boolean = False)
+        Dim matildaObj As matildaApp = T.getMatildaDiscover(fileN)
 
+        Dim jsonObj As List(Of appScan.makeTMJson.tmObject) = New List(Of appScan.makeTMJson.tmObject)
+        Dim currId As Integer = 1
+
+        Call loadNTY(T, "Components")
+        Console.WriteLine("Loaded comps: " + T.lib_Comps6.Count.ToString)
+        Dim compType$ = ""
+
+        Dim newHost As appScan.makeTMJson.tmObject '= New appScan.makeTMJson.tmObject
+
+        Dim infraLayer As Boolean = False
+        Dim serverLayer As Boolean = False
+        Dim databaseLayer As Boolean = False
+
+        Dim compUser As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+        With compUser
+            .ObjectId = currId
+            .ObjectType = "Component"
+            '.OutBoundId.Add(2)
+            .ComponentGuid = T.lib_Comps6(T.ndxCompbyName("Users")).guid.ToString
+            .ParentGroupId = 0
+            .Name = "Users"
+            currId += 1
+        End With
+        jsonObj.Add(compUser)
+        Dim numLayers As Integer = 0
+        Dim sLayerNDX As Integer = 0
+        Dim iLayerNDX As Integer = 0
+        Dim dLayerNDX As Integer = 0
+
+        For Each M In matildaObj.hosts
+            compType = ""
+            Select Case matildaObj.cloud_provider
+                Case "AWS"
+                    compType = "AWS EC2"
+                Case "Azure"
+                    compType = "Azure Virtual Machines"
+            End Select
+
+            If M.serverType = "Web Server" = True And serverLayer = False Then
+                If iLayerNDX = 0 Then
+                    serverLayer = True
+
+                    Dim sLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    numLayers += 1
+                    With sLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        sLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Server Role"
+                    End With
+                    jsonObj.Add(sLayer)
+                End If
+            End If
+
+            If M.serverType = "Infra" = True And infraLayer = False Then
+                If iLayerNDX = 0 Then
+                    numLayers += 1
+                    infraLayer = True
+                    Dim iLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    numLayers += 1
+                    With iLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        iLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Infra Role"
+                    End With
+                    jsonObj.Add(iLayer)
+                End If
+            End If
+
+
+            If M.serverType = "Database" = True And databaseLayer = False Then
+                If dLayerNDX = 0 Then
+                    numLayers += 1
+                    databaseLayer = True
+                    Dim dLayer As appScan.makeTMJson.tmObject = New appScan.makeTMJson.tmObject
+                    numLayers += 1
+                    With dLayer
+                        .ParentGroupId = 0
+                        .ObjectId = currId
+                        currId += 1
+                        dLayerNDX = .ObjectId
+                        .ObjectType = "Container"
+                        .ComponentGuid = "444643e1-1b35-46d3-842b-bedfe3e4bf09"
+                        .Name = "Database Role"
+                    End With
+                    jsonObj.Add(dLayer)
+                End If
+            End If
+
+            newHost = New appScan.makeTMJson.tmObject
+
+            Dim currHostId = 0
+            If compType <> "" Then
+                newHost = New appScan.makeTMJson.tmObject
+                With newHost
+                    .ObjectId = currId
+                    .ObjectType = "Component"
+                    .Name = M.name
+                    .ComponentGuid = T.lib_Comps6(T.ndxCompbyName(compType)).guid.ToString
+                    .ParentGroupId = 0
+                    currHostId = currId
+                    currId += 1
+                End With
+                If currId > 3 Then
+                    'obj 1 will be the first host in the JSON
+                    With jsonObj(1)
+                        '.OutBoundId.Add(currId)
+                    End With
+                End If
+            Else
+                Console.WriteLine("Unable to find HOST: " + M.name)
+            End If
+
+            Dim svcS$ = ""
+            Dim listenPorts$ = ""
+
+
+            For Each matSvc In matildaObj.getServices(M.ip)
+                svcS += matSvc.recommended_service + ","
+
+                Dim mapToComponent$ = matildaHostToRec(matSvc.recommended_service)
+                If Len(mapToComponent) Then
+                    newHost.ComponentGuid = T.lib_Comps6(T.ndxCompbyName(mapToComponent)).guid.ToString
+                Else
+                    Console.WriteLine("Not mapping directly to: " + matSvc.recommended_service)
+                End If
+
+                For Each porT In matSvc.ports
+                    listenPorts += porT.ToString + ","
+                Next
+            Next
+
+
+            If Len(svcS) Then svcS = Mid(svcS, 1, Len(svcS) - 1)
+            If Len(listenPorts) Then listenPorts = "Listening: " + Mid(listenPorts, 1, Len(listenPorts) - 1)
+            'Console.WriteLine(M.host_id.ToString + ": " + M.ip + " " + M.name + " Type: " + M.serverType + " Running " + M.operating_system + " " + listenPorts + vbCrLf + matildaObj.cloud_provider + " Instance Type: " + M.recommended_instance_type + vbCrLf + " Recommended OS: " + M.os_recommendation + vbCrLf + " Services: " + svcS + vbCrLf)
+
+            With newHost
+                '.Notes = M.ip + vbCrLf + "Recommended:" + vbCrLf + M.recommended_instance_type + vbCrLf + M.os_recommendation
+            End With
+
+            Select Case M.serverType
+
+                Case "Web Server"
+                    newHost.ParentGroupId = sLayerNDX
+                Case "Infra"
+                    newHost.ParentGroupId = iLayerNDX
+                Case "Database"
+                    newHost.ParentGroupId = dLayerNDX
+            End Select
+
+            If newHost.ParentGroupId = 0 Then
+                Console.WriteLine("Using 0 for ServerType: " + M.serverType)
+            End If
+
+            If currHostId <> 0 Then jsonObj.Add(newHost)
+        Next
+
+        With jsonObj(0)
+            'this is Users
+            .OutBoundId.Add(sLayerNDX)
+        End With
+
+        With jsonObj(sLayerNDX)
+            If dLayerNDX Then
+                .OutBoundId.Add(dLayerNDX)
+                If iLayerNDX Then
+                    .OutBoundId.Add(iLayerNDX)
+                End If
+            End If
+        End With
+
+        If jsonObj.Count = 1 Then
+            'only users exist
+            Console.WriteLine("ERROR: No objects built - aborting")
+            End
+        End If
+
+        Dim jsonFile$ = JsonConvert.SerializeObject(jsonObj)
+        safeKILL(fileN + ".json")
+        saveJSONtoFile(jsonFile, fileN + ".json")
+        fileN += ".json"
+        Console.WriteLine("Created " + fileN)
+
+        If inspectOnly = True Then
+            Console.WriteLine("# Objects: " + jsonObj.Count.ToString)
+            For Each J In jsonObj
+                Console.WriteLine("To create: " + J.Name)
+            Next
+            Exit Sub
+        Else
+            Console.WriteLine("Model contains " + jsonObj.Count.ToString + " components")
+        End If
+
+        Dim modelNum$ ' As Integer
+        Dim result2$ = T.createKISSmodelForImport(modelName)
+        modelNum = result2
+        If modelNum = "" Or InStr(modelNum, "ERROR") > 0 Then
+            Console.WriteLine("Unable to create project - " + result2)
+            End
+        End If
+        Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+
+        Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
+        If Mid(resP, 1, 5) = "ERROR" Then
+            Console.WriteLine("ERROR: Could not create - problem likely due to JSON > Check the Outbound mappings")
+        Else
+            Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+        End If
+        End
+
+
+        '
+        'Dim modelNum$ = "" ' As Integer
+        'Dim result2$ = T.createKISSmodelForImport(modelName)
+        'modelNum = result2
+        'If modelNum = "" Or InStr(modelNum, "ERROR") > 0 Then
+        '    Console.WriteLine("Unable to create project - " + result2)
+        '    End
+        'End If
+        '
+        'Console.WriteLine("Submitting JSON for import into Project #" + modelNum.ToString)
+        '
+        'Dim fileN$ = argValue("file", args)
+        'If Dir(fileN) = "" Then
+        '    Console.WriteLine("file does not exist " + fileN)
+        'End If
+        '
+        'Dim resP$ = T.importKISSmodel(fileN, modelNum.ToString)
+        'If Mid(resP, 1, 5) = "ERROR" Then
+        '    Console.WriteLine(resP)
+        'Else
+        '    Console.WriteLine(T.tmFQDN + "/diagram/" + modelNum.ToString)
+        'End If
+        'End
+
+    End Sub
     Public Sub usageReport(fileN$, Optional ByVal numDays As Integer = 3, Optional ByVal fullDetail As Boolean = False)
         Dim doCSV As Boolean = False
 
@@ -9001,6 +9300,68 @@ notThisModel:
 
 
 
+    Private Sub srs60(ByVal args() As String)
+
+        Console.WriteLine("Loading Security Requirements & Libraries")
+        Call loadNTY(T, "SecurityRequirements")
+
+        Console.WriteLine("Security Requirements       : " + T.lib_SR6.Count.ToString)
+
+        T.librarieS = T.getLibsSIX
+
+        Dim srchS$ = argValue("search", args)
+        If Len(srchS) Then srchS = LCase(srchS)
+
+        Dim numItems As Integer = 0
+
+        Dim doCSV As Boolean
+        Dim fileN$ = argValue("file", args)
+        Dim FF As Integer
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Library,Name,ID,Risk,Labels,Description" + vbCrLf)
+        End If
+
+        Dim qq$ = Chr(34)
+
+
+        For Each P In T.lib_SR6
+            If Len(srchS) Then
+                If InStr(LCase(P.labels), srchS) Then GoTo showTH
+                If InStr(LCase(P.name), srchS) Then GoTo showTH
+                If InStr(LCase(P.description), srchS) Then GoTo showTH
+                GoTo skipTH
+            End If
+showTH:
+            Dim libNDX As Integer = T.ndxLib(P.libraryId)
+            Dim lName$ = ""
+            If libNDX <> -1 Then lName$ = T.librarieS(libNDX).Name
+
+            lName += " [" + P.libraryId.ToString + "]"
+            lName += spaces(30 - Len(lName))
+
+            Dim idSt$ = "[" + P.id.ToString + "]"
+
+            Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+            If doCSV Then
+                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + "," + qT(HtmlEncode(P.description)) + vbCrLf)
+            End If
+            numItems += 1
+skipTH:
+        Next
+        Console.WriteLine("# of items in this list: " + numItems.ToString)
+        If doCSV Then
+            FileClose(FF)
+        End If
+        End
+
+    End Sub
 
     Private Sub threats60(ByVal args() As String)
 
@@ -9026,8 +9387,8 @@ notThisModel:
                 FF = FreeFile()
                 Console.WriteLine("Writing to CSV File: " + fileN)
                 FileOpen(FF, fileN, OpenMode.Output)
-                Print(FF, "Library,Name,ID,Risk,Labels" + vbCrLf)
-            End If
+            Print(FF, "Library,Name,ID,Risk,Labels,Description" + vbCrLf)
+        End If
 
             Dim qq$ = Chr(34)
 
@@ -9052,7 +9413,7 @@ showTH:
             Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
 
             If doCSV Then
-                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + vbCrLf)
+                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + "," + qT(HtmlEncode(P.description)) + vbCrLf)
             End If
             numItems += 1
 skipTH:
@@ -9062,6 +9423,85 @@ skipTH:
                 FileClose(FF)
             End If
             End
+
+    End Sub
+
+
+    Private Sub sahejThreatLabels(ByVal args() As String)
+
+        Console.WriteLine("Loading Threats & Libraries")
+        Call loadNTY(T, "Threats")
+
+        Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+
+        T.librarieS = T.getLibsSIX
+
+        Dim srchS$ = argValue("search", args)
+        If Len(srchS) Then srchS = LCase(srchS)
+
+        Dim numItems As Integer = 0
+
+        Dim doCSV As Boolean
+        Dim fileN$ = argValue("file", args)
+        Dim FF As Integer
+
+        If Len(fileN) Then
+            doCSV = True
+            safeKILL(fileN)
+            FF = FreeFile()
+            Console.WriteLine("Writing to CSV File: " + fileN)
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Library,Name,ID,Risk,Labels" + vbCrLf)
+        End If
+
+        Dim qq$ = Chr(34)
+
+        Dim lblS As Collection = New Collection
+
+
+        For Each P In T.lib_TH6
+            If Len(srchS) Then
+                If InStr(LCase(P.labels), srchS) Then GoTo showTH
+                If InStr(LCase(P.name), srchS) Then GoTo showTH
+                'If InStr(LCase(P.Description), srchS) Then GoTo showTH
+                GoTo skipTH
+            End If
+
+            If InStr(P.labels, "CAPEC-") = 0 Then GoTo skipTH
+
+            lblS = New Collection
+            lblS = CSVtoCOLL(P.labels)
+
+showTH:
+            Dim libNDX As Integer = T.ndxLib(P.libraryId)
+            Dim lName$ = ""
+            If libNDX <> -1 Then lName$ = T.librarieS(libNDX).Name
+
+            lName += " [" + P.libraryId.ToString + "]"
+            lName += spaces(30 - Len(lName))
+
+            Dim idSt$ = "[" + P.id.ToString + "]"
+
+            Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+
+            Dim labels$ = ""
+            For Each ll In lblS
+                labels += qT(ll) + ","
+            Next
+
+            If Mid(labels, Len(labels)) = "," Then labels = Mid(labels, Len(labels) - 1)
+
+            If doCSV Then
+                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + P.labels + vbCrLf)
+            End If
+            numItems += 1
+skipTH:
+        Next
+        Console.WriteLine("# of items in this list: " + numItems.ToString)
+        If doCSV Then
+            FileClose(FF)
+        End If
+        End
 
     End Sub
 
@@ -9430,17 +9870,161 @@ skipBlankLabel2:
         End
     End Sub
 
+    Private Function strideNum(sNum As Integer) As String
+        Select Case sNum
+            Case 1
+                Return "Spoofing"
+            Case 2
+                Return "Tampering"
+            Case 3
+                Return "Repudiation"
+            Case 4
+                Return "Information Disclosure"
+            Case 5
+                Return "Denial of Service"
+            Case 6
+                Return "Elevation of Privilege"
+
+        End Select
+    End Function
+
+    Private Function capecStr(c$) As String
+        c$ = Mid(c, InStr(c, "CAPEC-"))
+        c$ = Mid(c, 1, InStr(c, ":") - 1)
+        If InStr(c, " ") Then c = Mid(c, 1, InStr(c, " ") - 1)
+        Return c
+    End Function
+
+    Private Sub capecLabels(ByVal args() As String)
+        Dim fileN$ = argValue("file", args)
+        If Dir(fileN) = "" Or fileN = "" Then
+            Console.WriteLine("Need filename of CAPEC->STRIDE data for anaylsis.")
+            End
+        End If
+
+        Dim FF As Integer
+        FF = FreeFile()
+
+        FileOpen(FF, fileN, OpenMode.Input)
+        Dim a$ = ""
+
+        Dim numCAPECthreats As Integer = 0
+        Dim numATTACKthreats as integer=0
+
+        Dim stridE(5) As Collection
+        Dim sNum As Integer
+        sNum = 0
+
+        Do Until EOF(FF) = True
+            a$ = LineInput(FF)
+            If InStr(a, "!!!") Then
+                Dim strideSection$ = a
+                For whichSection = 1 To 6
+                    If InStr(a, "!!!" + strideNum(whichSection)) Then
+                        sNum = whichSection
+                        stride(sNum - 1) = New Collection
+                    End If
+                Next
+                GoTo skipLine
+            End If
+
+            If InStr(a, "CAPEC-") > 0 And sNum > 0 Then
+                stridE(sNum - 1).Add(capecStr(a))
+            End If
+
+skipLine:
+        Loop
+
+        FileClose(FF)
+
+        Dim uniqueThreats As Collection = New Collection
+        Dim gTotal As Integer = 0
+
+        Dim K As Integer
+        For K = 1 To 6
+            Console.WriteLine("# of CAPEC articles " + qT(strideNum(K)) + ": " + spaces(25 - Len(strideNum(K))) + stridE(K - 1).Count.ToString)
+        Next K
+
+        Call loadNTY(T, "Threats")
+        Console.WriteLine(vbCrLf + "Matching labels across " + T.lib_TH6.Count.ToString + " threats.." + vbCrLf)
+
+        For Each C In T.lib_TH6
+            If InStr(C.labels, "CAPEC") > 0 Then numCAPECthreats += 1
+        Next
+
+        Dim changedThreats As Collection = New Collection
+
+        For K = 1 To 6
+            Dim addnum As Integer = 0
+            Dim currLabel$ = strideNum(K)
+            '            Console.WriteLine(vbCrLf + "Adding " + qT(strideNum(K)) + " TAG to..")
+            For Each C In T.lib_TH6
+                If InStr(C.labels, "CAPEC-") > 0 Then
+                    Dim labelS As Collection = CSVtoCOLL(C.labels)
+                    Dim addLabel As Boolean = False
+                    For Each lbl In labelS
+                        If grpNDX(stridE(K - 1), lbl) Then
+                            addLabel = True
+                        End If
+                    Next
+                    If addLabel = True Then
+                        If grpNDX(labelS, currLabel) = 0 Then
+                            addnum += 1
+                            '                       Console.WriteLine("[" + C.id.ToString + "] " + C.name)
+                            ' Here would make the change
+                            '
+                            C.labels += "," + currLabel
+                            If grpNDX(uniqueThreats, C.id.ToString) = 0 Then
+                                uniqueThreats.Add(C.id.ToString)
+                                changedThreats.Add(C.guid)
+                                If InStr(C.labels, "ATT&CK") > 0 Then numATTACKthreats += 1
+                            End If
+                        End If
+                    End If
+                    End If
+            Next
+            Console.WriteLine("Total # threats " + qT(currLabel) + ": " + spaces(29 - Len(currLabel)) + addnum.ToString)
+            gTotal += addnum
+        Next K
+
+        Console.WriteLine(vbCrLf + "Total # of labels applied:                       " + gTotal.ToString)
+        Console.WriteLine("Threats with at least 1 new label:               " + uniqueThreats.Count.ToString)
+        Console.WriteLine("% of CAPEC-related threats with a STRIDE tag:    " + Math.Round(uniqueThreats.Count / numCAPECthreats * 100, 1).ToString + "%")
+        Console.WriteLine("Estimated % of ATT&CK/CAPEC overlap:             " + Math.Round(numATTACKthreats / uniqueThreats.Count * 100, 1).ToString + "%")
+
+        Console.WriteLine(vbCrLf)
+
+        Dim makeChanges As Boolean = False
+        If LCase(argValue("makechanges", args)) = "true" Then makeChanges = True
+
+        For Each guiD In changedThreats
+            With T.guidTHREAT6(guiD)
+                Dim newT As List(Of tm6Threat) = New List(Of tm6Threat)
+                newT.Add(T.guidTHREAT6(guiD))
+                If makeChanges = True Then
+                    Console.WriteLine(T.editThreat6(newT).ToString + " [" + .id.ToString + "] " + .name + " | " + .labels)
+                Else
+                    Console.WriteLine("[" + .id.ToString + "] " + .name + " | " + .labels)
+                End If
+            End With
+        Next
+        End
+    End Sub
+
+
+
+
     Private Sub show_comp6(ByVal args() As String)
 
         Call loadNTY(T, "Components")
-        Console.WriteLine("Components    : " + T.lib_Comps6.Count.ToString)
+        Console.WriteLine("Components     " + T.lib_Comps6.Count.ToString)
         'Call loadNTY(T, "Threats")
-        'Console.WriteLine("Threats       : " + T.lib_TH6.Count.ToString)
+        'Console.WriteLine("Threats        " + T.lib_TH6.Count.ToString)
         'Call loadNTY(T, "SecurityRequirements")
-        'Console.WriteLine("Requirements  : " + T.lib_SR6.Count.ToString)
+        'Console.WriteLine("Requirements   " + T.lib_SR6.Count.ToString)
 
         T.librarieS = T.getLibsSIX
-        Console.WriteLine("Libraries     : " + T.librarieS.Count.ToString)
+        Console.WriteLine("Libraries      " + T.librarieS.Count.ToString)
 
 
         Dim fileN$ = argValue("file", args)
@@ -9456,9 +10040,9 @@ skipBlankLabel2:
             Dim hLine$ = "Library,Component,CompID,Comp_Type" '#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR"
 
             Print(FF, hLine + vbCrLf)
-        End If
+            End If
 
-        For Each C In T.lib_Comps6
+            For Each C In T.lib_Comps6
             Dim libNDX As Integer = -1
             libNDX = T.ndxLib(C.libraryId)
             Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) ' + "," + Len(C.description).ToString
@@ -9503,7 +10087,7 @@ skipBlankLabel2:
             Call safeKILL(fileN)
             FF = FreeFile()
             FileOpen(FF, fileN, OpenMode.Output)
-            Dim hLine$ = "Library,Component,CompID,Comp_Type,#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR,#_COMP,#_UNDEF,DESC_LEN"
+            Dim hLine$ = "Library,Component,CompID,Comp_Type,#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR,#_COMP,#_UNDEF,DESC_LEN,DESC"
             If confirmOBJ = True Then hLine += ",MISSING"
 
             Print(FF, hLine + vbCrLf)
@@ -9565,7 +10149,7 @@ skipconfirmation:
             Dim undefineD As Integer = 0
             If C.numThreats + C.unqTL_SR + C.numDirectSRs + C.numATTR = 0 Then undefineD = 1
 
-            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) + "," + C.numThreats.ToString + "," + C.unqTL_SR.ToString + "," + C.numDirectSRs.ToString + "," + C.numATTR(True).ToString + "," + C.numAttrTH(True).ToString + "," + C.numAttrSR(True).ToString + ",1," + undefineD.ToString + "," + Len(desC).ToString
+            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) + "," + C.numThreats.ToString + "," + C.unqTL_SR.ToString + "," + C.numDirectSRs.ToString + "," + C.numATTR(True).ToString + "," + C.numAttrTH(True).ToString + "," + C.numAttrSR(True).ToString + ",1," + undefineD.ToString + "," + Len(desC).ToString + "," + qT(HtmlEncode(desC))
             If confirmOBJ = True Then fLine += "," + missinG
 
             Print(FF, fLine + vbCrLf)
