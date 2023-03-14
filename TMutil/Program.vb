@@ -1244,6 +1244,14 @@ skipDEPT1:
                 End If
                 End
 
+            Case "proj_sr", "proj_srs"
+                Call getModelSRs(args)
+                End
+
+            Case "proj_threats", "proj_threat"
+                Call getModelThreats(args)
+                End
+
             Case "get_projects"
                 If T.isTMsix = True Then
                     Call getProj6(args)
@@ -5086,15 +5094,15 @@ skipSR:
         If doCSV Then
             FF = FreeFile()
             FileOpen(FF, fileN, OpenMode.Output)
-            Print(FF, "Project Name,Id,Version,Create Date,Created By,Last Modified Date,Last Modified By,Labels" + vbCrLf)
+            Print(FF, "Project Name,Id,GUID,Version,Create Date,Created By,Last Modified Date,Last Modified By,Labels" + vbCrLf)
         End If
 
         For Each P In PP
-            Console.WriteLine(col5CLI(P.Name + " [" + P.Id.ToString + "]", P.Type, P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
+            Console.WriteLine(col5CLI(P.name + " [" + P.id.ToString + "]", P.createdByName + Space(30 - Len(P.createdByName)), P.guid + Space(10), "Vers " + P.version))
 
             If doCSV = False Then GoTo skipCSV
             With P
-                Print(FF, c$ + .Name + c$ + "," + .Id.ToString + "," + c$ + .Version + c$ + "," + c$ + .CreateDate.ToShortDateString + c$ + "," + c$ + .CreatedByName + c$ + "," + c$ + .LastModifiedDate.ToShortDateString + c$ + "," + c$ + .LastModifiedByName + c$ + "," + c$ + .Labels + c$ + vbCrLf)
+                Print(FF, c$ + .name + c$ + "," + .id.ToString + "," + qT(.guid) + "," + c$ + .version + c$ + "," + c$ + .createDate.ToShortDateString + c$ + "," + c$ + .createdByName + c$ + "," + c$ + .LastModifiedDate.ToShortDateString + c$ + "," + c$ + .lastModifiedByName + c$ + "," + c$ + .labels + c$ + vbCrLf)
             End With
 skipCSV:
         Next
@@ -5106,6 +5114,135 @@ skipCSV:
 
     End Sub
 
+    Private Sub getModelSRs(args() As String)
+
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6()
+
+        Dim doCSV As Boolean = False
+        Dim fileN$ = ""
+
+        Dim modelName$ = argValue("modelname", args)
+        Dim modelGuid$ = argValue("modelguid", args)
+        Dim search4$ = modelName
+        If search4 = "" Then search4 = modelGuid
+
+        If search4 = "" Then
+            Console.WriteLine("Must provide either parameter with MODEL info: --MODELNAME or --MODELGUID")
+            End
+        End If
+
+        If Len(argValue("file", args)) Then
+            doCSV = True
+            fileN = argValue("file", args)
+            safeKILL(fileN)
+            Console.WriteLine("Writing CSV file -> " + fileN)
+
+        End If
+        Dim c$ = Chr(34)
+
+        Dim FF As Integer
+
+        If doCSV Then
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Requirement Name,Unq ID,SR ID,Source Object,Status,Ticket" + vbCrLf)
+        End If
+
+        For Each P In PP
+            If P.name = search4 Or P.guid = search4 Then
+                Console.WriteLine("Found model " + qT(P.name) + " - " + P.guid)
+
+                Dim LT As List(Of tm6SRsOfModel)
+                LT = T.getSRsOfProject6(P.guid)
+
+                For Each tH In LT
+                    Dim tHinfo$ = tH.securityRequirementName + " [" + tH.securityRequirementId.ToString + "]"
+                    Dim sInfo$ = tH.elementDisplayName + " [" + tH.statusName + "]"
+
+                    Console.WriteLine(fLine(tHinfo + spaces(75 - Len(tHinfo)), sInfo + spaces(40 - Len(sInfo)) + tH.externalSourceId))
+
+                    If doCSV = True Then
+                        Dim hLine$ = qT(tH.securityRequirementName) + "," + tH.id.ToString + "," + tH.securityRequirementId.ToString + "," + qT(tH.elementDisplayName) + "," + qT(tH.statusName) + "," + qT(tH.externalSourceId)
+                        '                       Console.WriteLine(hLine)
+                        Print(FF, hLine + vbCrLf)
+                    End If
+                Next
+
+            End If
+        Next
+
+        If doCSV = True Then
+            FileClose(FF)
+        End If
+        End
+
+    End Sub
+
+    Private Sub getModelThreats(args() As String)
+
+        Dim PP As List(Of tmProjInfoShort6)
+        PP = T.getAllProjects6()
+
+        Dim doCSV As Boolean = False
+        Dim fileN$ = ""
+
+        Dim modelName$ = argValue("modelname", args)
+        Dim modelGuid$ = argValue("modelguid", args)
+        Dim search4$ = modelName
+        If search4 = "" Then search4 = modelGuid
+
+        If search4 = "" Then
+            Console.WriteLine("Must provide either parameter with MODEL info: --MODELNAME or --MODELGUID")
+            End
+        End If
+
+        If Len(argValue("file", args)) Then
+            doCSV = True
+            fileN = argValue("file", args)
+            safeKILL(fileN)
+            Console.WriteLine("Writing CSV file -> " + fileN)
+
+        End If
+        Dim c$ = Chr(34)
+
+        Dim FF As Integer
+
+        If doCSV Then
+            FF = FreeFile()
+            FileOpen(FF, fileN, OpenMode.Output)
+            Print(FF, "Threat Name,Unq ID,Threat ID,Source Object,Status,Ticket" + vbCrLf)
+        End If
+
+        For Each P In PP
+            If P.name = search4 Or P.guid = search4 Then
+                Console.WriteLine("Found model " + qT(P.name) + " - " + P.guid)
+
+                Dim LT As List(Of tm6ThreatsOfModel)
+                LT = T.getThreatsOfProject6(P.guid)
+
+                For Each tH In LT
+                    Dim tHinfo$ = tH.threatName + " [" + tH.threatId.ToString + "]"
+                    Dim sInfo$ = tH.sourceDisplayName + " [" + tH.statusName + "]"
+
+                    Console.WriteLine(fLine(tHinfo + spaces(75 - Len(tHinfo)), sInfo + spaces(40 - Len(sInfo)) + tH.externalSourceId))
+
+                    If doCSV = True Then
+                        Dim hLine$ = qT(tH.threatName) + "," + tH.id.ToString + "," + tH.threatId.ToString + "," + qT(tH.sourceDisplayName) + "," + qT(tH.statusName) + "," + qT(tH.externalSourceId)
+                        '                       Console.WriteLine(hLine)
+                        Print(FF, hLine + vbCrLf)
+                    End If
+                Next
+
+            End If
+        Next
+
+        If doCSV = True Then
+            FileClose(FF)
+        End If
+        End
+
+    End Sub
     Private Sub compCompare(C1 As tmComponent, C2 As tmComponent, Optional ByVal showSR As Boolean = True, Optional ByVal showDIFF As Boolean = False, Optional ByVal shareONLY As Boolean = False, Optional ByVal alreadyLoaded As Boolean = False)
         tf_components = New List(Of tmComponent)
         For Each C In T.lib_Comps
@@ -9309,6 +9446,14 @@ notThisModel:
 
         T.librarieS = T.getLibsSIX
 
+
+
+        Dim inclDesc As Boolean = False
+        If LCase(argValue("showdescript", args)) = "true" Then
+            Console.WriteLine("Will include description")
+            inclDesc = True
+        End If
+
         Dim srchS$ = argValue("search", args)
         If Len(srchS) Then srchS = LCase(srchS)
 
@@ -9324,7 +9469,9 @@ notThisModel:
             FF = FreeFile()
             Console.WriteLine("Writing to CSV File: " + fileN)
             FileOpen(FF, fileN, OpenMode.Output)
-            Print(FF, "Library,Name,ID,Risk,Labels,Description" + vbCrLf)
+            Dim hLin$ = "Library,Name,ID,Risk,Labels"
+            If inclDesc = True Then hLin += ",Description"
+            Print(FF, hLin + vbCrLf)
         End If
 
         Dim qq$ = Chr(34)
@@ -9350,7 +9497,9 @@ showTH:
             Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
 
             If doCSV Then
-                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + "," + qT(HtmlEncode(P.description)) + vbCrLf)
+                Dim pLine$ = qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq
+                If inclDesc = True Then pLine += "," + qT(HtmlEncode(P.description))
+                Print(FF, pLine + vbCrLf)
             End If
             numItems += 1
 skipTH:
@@ -9375,6 +9524,13 @@ skipTH:
         Dim srchS$ = argValue("search", args)
         If Len(srchS) Then srchS = LCase(srchS)
 
+
+        Dim inclDesc As Boolean = False
+        If LCase(argValue("showdescript", args)) = "true" Then
+            Console.WriteLine("Will include description")
+            inclDesc = True
+        End If
+
         Dim numItems As Integer = 0
 
         Dim doCSV As Boolean
@@ -9386,8 +9542,10 @@ skipTH:
                 safeKILL(fileN)
                 FF = FreeFile()
                 Console.WriteLine("Writing to CSV File: " + fileN)
-                FileOpen(FF, fileN, OpenMode.Output)
-            Print(FF, "Library,Name,ID,Risk,Labels,Description" + vbCrLf)
+            FileOpen(FF, fileN, OpenMode.Output)
+            Dim hLine$ = "Library,Name,ID,Risk,Labels"
+            If inclDesc = True Then hLine += ",Description"
+            Print(FF, hLine + vbCrLf)
         End If
 
             Dim qq$ = Chr(34)
@@ -9413,7 +9571,9 @@ showTH:
             Console.WriteLine(lName + spaces(30 - Len(lName)) + idSt + spaces(10 - Len(idSt)) + P.name) ' P.CreatedByName + Space(30 - Len(P.CreatedByName)), " ", "Vers " + P.Version))
 
             If doCSV Then
-                Print(FF, qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq + "," + qT(HtmlEncode(P.description)) + vbCrLf)
+                Dim pLine$ = qq + lName + qq + "," + qq + P.name + qq + "," + P.id.ToString + "," + qq + P.riskName + qq + "," + qq + P.labels + qq
+                If inclDesc = True Then pLine += "," + qT(HtmlEncode(P.description))
+                Print(FF, pLine + vbCrLf)
             End If
             numItems += 1
 skipTH:
@@ -10076,6 +10236,11 @@ skipLine:
             confirmOBJ = True
         End If
 
+        Dim inclDesc As Boolean = False
+        If LCase(argValue("showdescript", args)) = "true" Then
+            Console.WriteLine("Will include description")
+            inclDesc = True
+        End If
 
         Dim fileN$ = argValue("file", args)
         Dim doCSV As Boolean = False
@@ -10087,7 +10252,8 @@ skipLine:
             Call safeKILL(fileN)
             FF = FreeFile()
             FileOpen(FF, fileN, OpenMode.Output)
-            Dim hLine$ = "Library,Component,CompID,Comp_Type,#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR,#_COMP,#_UNDEF,DESC_LEN,DESC"
+            Dim hLine$ = "Library,Component,CompID,Comp_Type,#TH,#TH_UNQSR,#DIR_SR,#L_ATTR,L_ATTR#TH,L_ATTR#SR,#_COMP,#_UNDEF,DESC_LEN"
+            If inclDesc = True Then hLine += ",DESC"
             If confirmOBJ = True Then hLine += ",MISSING"
 
             Print(FF, hLine + vbCrLf)
@@ -10149,7 +10315,8 @@ skipconfirmation:
             Dim undefineD As Integer = 0
             If C.numThreats + C.unqTL_SR + C.numDirectSRs + C.numATTR = 0 Then undefineD = 1
 
-            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) + "," + C.numThreats.ToString + "," + C.unqTL_SR.ToString + "," + C.numDirectSRs.ToString + "," + C.numATTR(True).ToString + "," + C.numAttrTH(True).ToString + "," + C.numAttrSR(True).ToString + ",1," + undefineD.ToString + "," + Len(desC).ToString + "," + qT(HtmlEncode(desC))
+            Dim fLine$ = qT(T.librarieS(libNDX).Name) + "," + qT(C.name) + "," + C.id.ToString + "," + qT(C.componentTypeName) + "," + C.numThreats.ToString + "," + C.unqTL_SR.ToString + "," + C.numDirectSRs.ToString + "," + C.numATTR(True).ToString + "," + C.numAttrTH(True).ToString + "," + C.numAttrSR(True).ToString + ",1," + undefineD.ToString + "," + Len(desC).ToString
+            If inclDesc = True Then fLine += "," + qT(HtmlEncode(desC))
             If confirmOBJ = True Then fLine += "," + missinG
 
             Print(FF, fLine + vbCrLf)
@@ -10660,10 +10827,13 @@ skipThisOne3:
         Console.WriteLine(fLine("submitkis", "Converts KIS JSON into a Threat Model --FILE (json filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("csvmodel", "Converts a CSV file into a Threat Model, --FILE (csv filename), --MODELNAME (unique model name)"))
         Console.WriteLine(fLine("get_projects", "Returns Projects, OPTIONAL --FILE (csv filename)"))
-        Console.WriteLine(fLine("ronnie_import_comp", "Adds components to Threat Framework based on custom JSON format, OPTIONAL --FILE (json filename)"))
-        Console.WriteLine(fLine("get_threats", "Returns threat list or single threat, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename)"))
+        ' Console.WriteLine(fLine("ronnie_import_comp", "Adds components to Threat Framework based on custom JSON format, OPTIONAL --FILE (json filename)"))
+        Console.WriteLine(fLine("get_threats", "Returns threat list, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename), --showdescript true"))
+        Console.WriteLine(fLine("get_srs", "Returns security req list, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename), --showdescript true"))
+        Console.WriteLine(fLine("model_threats", "Returns threats of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
+        Console.WriteLine(fLine("model_srs", "Returns requirements of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
         Console.WriteLine(fLine("activity_report", "Opens Excel/XLS file highlighting usage across all Projects"))
-        Console.WriteLine(fLine("allcomps_report", "High-level details of each component, OPT arg: --FILE filename.csv, --VALIDATE if true, confirms integrity of each comp"))
+        Console.WriteLine(fLine("allcomps_report", "High-level details of each component, OPT arg: --FILE filename.csv, --VALIDATE if true, confirms integrity of each comp, --showdescript true"))
         Console.WriteLine(fLine("show_comp6", "Returns list of Components, OPT args:--LIB (library name),--FILE (csv filename)")) ',--SHOWUSAGE true, --LIBSONLY true"))
 
     End Sub

@@ -4175,6 +4175,7 @@ Public Class tm6ThreatsOfModel
     ' actualrisk object
     Public actualRiskName$
     Public statusName$
+    Public externalSourceId As String
     ' type is always 0
     Public sourceType$ 'usually/always Node
     Public componentId As Integer
@@ -4232,8 +4233,10 @@ Public Class tm6SRsOfModel
     Public projectSecurityRequirementId As Long
     Public elementId As Long
     Public elementName$
+    Public elementDisplayName$
     Public isImplemented As Boolean
     Public isOptional As Boolean
+    Public externalSourceId As String
     Public sourceId As Integer ' the library ID of the source of this
     Public sourceType$   ' could be Properties, Threats, Node
     Public sourceName$
