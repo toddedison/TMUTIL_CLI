@@ -5150,7 +5150,7 @@ skipCSV:
         End If
 
         For Each P In PP
-            If P.name = search4 Or P.guid = search4 Then
+            If LCase(P.name) = LCase(search4) Or P.guid = search4 Then
                 Console.WriteLine("Found model " + qT(P.name) + " - " + P.guid)
 
                 Dim LT As List(Of tm6SRsOfModel)
@@ -5215,7 +5215,7 @@ skipCSV:
         End If
 
         For Each P In PP
-            If P.name = search4 Or P.guid = search4 Then
+            If LCase(P.name) = LCase(search4) Or P.guid = search4 Then
                 Console.WriteLine("Found model " + qT(P.name) + " - " + P.guid)
 
                 Dim LT As List(Of tm6ThreatsOfModel)
@@ -10830,8 +10830,8 @@ skipThisOne3:
         ' Console.WriteLine(fLine("ronnie_import_comp", "Adds components to Threat Framework based on custom JSON format, OPTIONAL --FILE (json filename)"))
         Console.WriteLine(fLine("get_threats", "Returns threat list, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename), --showdescript true"))
         Console.WriteLine(fLine("get_srs", "Returns security req list, OPT arg: --ID (component ID), OPT --SEARCH text,--FILE (csv filename), --showdescript true"))
-        Console.WriteLine(fLine("model_threats", "Returns threats of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
-        Console.WriteLine(fLine("model_srs", "Returns requirements of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
+        Console.WriteLine(fLine("proj_threats", "Returns threats of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
+        Console.WriteLine(fLine("proj_srs", "Returns requirements of a model,arg: use --MODELNAME (name) or --MODELGUID (guid), OPT --FILE (csv filename)"))
         Console.WriteLine(fLine("activity_report", "Opens Excel/XLS file highlighting usage across all Projects"))
         Console.WriteLine(fLine("allcomps_report", "High-level details of each component, OPT arg: --FILE filename.csv, --VALIDATE if true, confirms integrity of each comp, --showdescript true"))
         Console.WriteLine(fLine("show_comp6", "Returns list of Components, OPT args:--LIB (library name),--FILE (csv filename)")) ',--SHOWUSAGE true, --LIBSONLY true"))
