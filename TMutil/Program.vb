@@ -5030,14 +5030,14 @@ skip:
         Dim linE$ = ""
 
         For Each nO In allNodes
-            currC = qT(nO.Name) + "," + qT(nO.FullName) + ","
+            currC = qT(nO.Name + " [" + nO.Id.ToString + "]") + "," + qT(nO.FullName) + ","
             linE = currC
 
             ' direct SRs first
             For Each sR In allSRs
-                If sR.sourceType = "Node" And sR.sourceName = nO.Name Then
-                    Console.WriteLine(linE + ",," + qT(sR.securityRequirementName) + "," + qT(sR.statusName))
-                    If doCSV Then Print(FF, linE + ",," + qT(sR.securityRequirementName) + "," + qT(sR.statusName) + vbCrLf)
+                If sR.sourceType = "Node" And sR.elementId = nO.Id Then
+                    Console.WriteLine(linE + ",," + qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName))
+                    If doCSV Then Print(FF, linE + ",," + qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName) + vbCrLf)
                 End If
             Next
 
@@ -5045,23 +5045,38 @@ skip:
                 Dim noSRs As Boolean = True
                 Dim noTHs As Boolean = True
 
-                currT = qT(tH.threatName) + "," + qT(tH.statusName) + ","
+                currT = qT(tH.threatName + " [" + tH.id.ToString + "]") + "," + qT(tH.statusName) + ","
                 If tH.elementId = nO.Id Then
                     noTHs = False
                     linE = currC + currT
                 End If
 
+                Dim oldLine$ = ""
+
                 For Each sR In allSRs
                     If sR.sourceType = "Node" Then GoTo skipSR
-                    If sR.sourceName = tH.threatName And sR.componentName = nO.Name Then
+                    If sR.sourceName = tH.threatName And sR.elementId = nO.Id And tH.elementId = nO.Id Then
                         noSRs = False
-                        currSR = qT(sR.securityRequirementName) + "," + qT(sR.statusName)
+                        currSR = qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName)
+                        linE = currC + currT
+
+                        Dim pLine$ = ""
+
+                        If linE = oldline Then
+                            pLine = ",,,,"
+                        Else
+                            pLine = linE
+                        End If
+
+                        oldLine = linE
+
                         Console.WriteLine(linE + currSR)
-                        If doCSV Then Print(FF, linE + currSR + vbCrLf)
+                        If doCSV Then Print(FF, pLine + currSR + vbCrLf)
                     End If
 skipSR:
                 Next
                 If noSRs = True And noTHs = False Then
+                    'FIX THIS - Make sure it supports direct SRs and Threats with no SRs
                     Console.WriteLine(linE + ",,")
                     If doCSV Then Print(FF, linE + ",," + vbCrLf)
                 End If

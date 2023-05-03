@@ -451,7 +451,7 @@ errorcatch:
         getThreatsOfProject6 = New List(Of tm6ThreatsOfModel)
 
         Dim bodY$ = "{" + qT("pageNumber") + ": 1," + qT("pageLimit") + ": 10000}"
-        Dim jsoN$ = getAPIData("/api/project/" + guiD + "/threats", True, bodY) '/smartfilter", True, bodY)
+        Dim jsoN$ = getAPIData("/api/project/" + guiD + "/threats", True, bodY)
 
         Dim O As JObject = JObject.Parse(jsoN)
         jsoN = O.SelectToken("data").ToString

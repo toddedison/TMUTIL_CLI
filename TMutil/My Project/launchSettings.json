@@ -2,7 +2,7 @@
   "profiles": {
     "TMutil": {
       "commandName": "Project",
-      "commandLineArgs": "capec_labels --file capec.json --makechanges true"
+      "commandLineArgs": "proj_report --project armh --file projrpt1.csv"
     }
   }
 }
