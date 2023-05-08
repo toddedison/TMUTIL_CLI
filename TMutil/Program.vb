@@ -1162,10 +1162,12 @@ skipSR:
                 Call userGrpReport(argValue("dept", args), argValue("file", args))
                     End
 
-                    Case "get_departments6"
-                Dim GG As List(Of tmDepartments6)
-                GG = T.getDepartments6()
+            Case "get_departments"
+                Dim GG As List(Of tmDept)
+                GG = T.getDepartments()
                 If T.isTMsix = True Then
+                    Console.WriteLine("This is version 6.")
+                    Console.WriteLine(" ")
                     For Each G In GG
                         Console.WriteLine("Id: " + G.id.ToString)
                         Console.WriteLine(G.name)
@@ -10891,7 +10893,7 @@ skipThisOne3:
         Console.WriteLine(vbCrLf + "6.0 Commands" + vbCrLf + "=================================================")
 
         Console.WriteLine(fLine("i2i_comp_compare", "Creates full CSV suitable for pivot highlighting TF differences between 2 servers, args --I2 (fqdn), --FILE (.csv)"))
-        Console.WriteLine(fLine("get_departments6", "Returns a list of the departments"))
+        Console.WriteLine(fLine("get_departments", "Returns a list of the departments"))
         Console.WriteLine(fLine("get_users", "Returns number of users & list of users"))
         Console.WriteLine(fLine("get_groups6", "Returns Groups"))
         Console.WriteLine(fLine("user_groups", "Returns Groups of a specified user, arg: REQUIRED --email xxx@email.com"))

@@ -379,14 +379,6 @@ keepGoing:
 
     End Function
 
-    Public Function getDepartments6() As List(Of tmDepartments6)
-        getDepartments6 = New List(Of tmDepartments6)
-        Dim jsoN$ = getAPIData("/api/departments")
-
-        getDepartments6 = JsonConvert.DeserializeObject(Of List(Of tmDepartments6))(jsoN)
-
-    End Function
-
     Public Function getUsersSIX() As List(Of tmUser)
         getUsersSIX = New List(Of tmUser)
         Dim jsoN$ = getAPIData("/api/users")
@@ -3610,11 +3602,6 @@ Public Class tmGroups6
     Public groupUsers As List(Of groupUsers6)
 End Class
 
-Public Class tmDepartments6
-    Public id As Long
-    Public name$
-    Public guid$
-End Class
 Public Class groupUsers6
     Public userId As Long
     Public userName As String
