@@ -1135,6 +1135,17 @@ skipSR:
                 Next
                 End
 
+            Case "get_groups6"
+                Dim GG As List(Of tmGroups6)
+                GG = T.getGroups6()
+                If T.isTMsix = True Then
+                    Console.WriteLine("This is version 6.")
+                    For Each G In GG
+                        Console.WriteLine(G.name)
+                    Next
+                    End
+                End If
+
             Case "user_libs"
                 Call userLibReport(argValue("dept", args), argValue("file", args))
                 End
@@ -1144,9 +1155,25 @@ skipSR:
                 End
 
             Case "user_groups"
+                If T.isTMsix = True Then
+                    Call userGroups(args)
+                    End
+                End If
                 Call userGrpReport(argValue("dept", args), argValue("file", args))
-                End
+                    End
 
+                    Case "get_departments6"
+                Dim GG As List(Of tmDepartments6)
+                GG = T.getDepartments6()
+                If T.isTMsix = True Then
+                    For Each G In GG
+                        Console.WriteLine("Id: " + G.id.ToString)
+                        Console.WriteLine(G.name)
+                        Console.WriteLine("GUID: " + G.guid.ToString)
+                        Console.WriteLine(" ")
+                    Next
+                    End
+                End If
 
             Case "platform_usage"
                 Dim fileN$ = argValue("file", args)
@@ -1171,6 +1198,9 @@ skipSR:
                     Dim aU As List(Of tmUser)
                     aU = T.getUsersSIX()
                     Console.WriteLine("# of Users: " + aU.Count.ToString)
+                    For Each A In aU
+                        Console.WriteLine(A.Name)
+                    Next
                     End
                 End If
 
@@ -4826,6 +4856,10 @@ nextItem3:
 
             Case "capec_labels"
                 Call capecLabels(args)
+                End
+
+
+
 
         End Select
         Dim K As Integer
@@ -10186,8 +10220,33 @@ skipLine:
         End
     End Sub
 
+    Private Sub userGroups(args() As String)
+        Dim grpS As List(Of tmGroups6) = New List(Of tmGroups6)
+        grpS = T.getGroups6()
+
+        Dim uEmail$ = ""
+        uEmail = LCase(argValue("email", args))
+
+        If uEmail = "" Then
+            Console.WriteLine("You must specify an email address.")
+            Exit Sub
+        End If
+
+        Dim found As Boolean = False
 
 
+        For Each grP In grpS
+            found = False
+            For Each usR In grP.groupUsers
+                If LCase(usR.userEmail) = uEmail Then
+                    found = True
+                End If
+            Next
+            If found = True Then
+                Console.WriteLine(grP.name)
+            End If
+        Next
+    End Sub
 
     Private Sub show_comp6(ByVal args() As String)
 
@@ -10832,7 +10891,10 @@ skipThisOne3:
         Console.WriteLine(vbCrLf + "6.0 Commands" + vbCrLf + "=================================================")
 
         Console.WriteLine(fLine("i2i_comp_compare", "Creates full CSV suitable for pivot highlighting TF differences between 2 servers, args --I2 (fqdn), --FILE (.csv)"))
-        Console.WriteLine(fLine("get_users", "Gets users"))
+        Console.WriteLine(fLine("get_departments6", "Returns a list of the departments"))
+        Console.WriteLine(fLine("get_users", "Returns number of users & list of users"))
+        Console.WriteLine(fLine("get_groups6", "Returns Groups"))
+        Console.WriteLine(fLine("user_groups", "Returns Groups of a specified user, arg: REQUIRED --email xxx@email.com"))
         Console.WriteLine(fLine("clean_entity_labels", "Removes unnecessary labels from Components & SRs, not incl those associated with Libs or Threats, args --delete true (otherwise output only)"))
         Console.WriteLine(fLine("get_labels", "Returns Labels, arg: opt --file filename.csv"))
         Console.WriteLine(fLine("template_check", "Finds templates with broken links, tells you what they are in summary breakdown"))
@@ -10851,8 +10913,8 @@ skipThisOne3:
         Console.WriteLine(fLine("allcomps_report", "High-level details of each component, OPT arg: --FILE filename.csv, --VALIDATE if true, confirms integrity of each comp, --showdescript true"))
         Console.WriteLine(fLine("show_comp6", "Returns list of Components, OPT args:--LIB (library name),--FILE (csv filename)")) ',--SHOWUSAGE true, --LIBSONLY true"))
         Console.WriteLine(fLine("capec_labels", "Apply STRIDE tags, OPT arg: --FILE (capec_mapping_file), --MAKECHANGES if not true, provides preview of changes only"))
-        
-        'Todd Comment
+
+
     End Sub
 
 End Module
