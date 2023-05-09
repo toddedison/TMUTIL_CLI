@@ -1167,12 +1167,12 @@ skipSR:
                 GG = T.getDepartments()
                 If T.isTMsix = True Then
                     Console.WriteLine("This is version 6.")
-                    Console.WriteLine(" ")
+                    Console.WriteLine("")
                     For Each G In GG
                         Console.WriteLine("Id: " + G.id.ToString)
                         Console.WriteLine(G.name)
                         Console.WriteLine("GUID: " + G.guid.ToString)
-                        Console.WriteLine(" ")
+                        Console.WriteLine("")
                     Next
                     End
                 End If
