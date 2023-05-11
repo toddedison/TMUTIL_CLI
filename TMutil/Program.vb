@@ -5009,119 +5009,251 @@ skip:
         Next
     End Sub
     Private Sub projRpt6(args() As String)
+
         Dim PP As List(Of tmProjInfoShort6)
+
         PP = T.getAllProjects6()
 
+
+
         Dim doCSV As Boolean = False
+
         Dim fileN$ = ""
 
+
+
         If Len(argValue("file", args)) Then
+
             doCSV = True
+
             fileN = argValue("file", args)
+
             safeKILL(fileN)
+
             Console.WriteLine("Writing CSV file -> " + fileN)
 
+
+
         End If
+
+
 
         Dim FF As Integer
 
+
+
         If doCSV Then
+
             FF = FreeFile()
+
             FileOpen(FF, fileN, OpenMode.Output)
+
             Print(FF, "Node Name,Display Name,Threat,T-Status,Requirement,SR-Status" + vbCrLf)
+
         End If
 
-        Dim modelName$ = argValue("project", args)
+
+
+        Dim modelName$ = argValue("modelguid", args)
+
         If Len(modelName) = 0 Then
-            Console.WriteLine("Must provide diagram name using parameter --PROJECT")
+
+            Console.WriteLine("Must provide diagram name using parameter --modelguid")
+
             End
+
         End If
+
+
 
         Dim guiD$ = ""
 
+
+
         For Each proJ In PP
-            If LCase(proJ.name) = LCase(modelName) Then
+
+            If LCase(proJ.guid) = LCase(modelName) Then
+
                 guiD = proJ.guid
+
                 modelName = proJ.name
+
                 Exit For
+
             End If
+
         Next
+
+
 
         If Len(guiD) = 0 Then
-            Console.WriteLine("Unable to find the project --PROJECT " + modelName)
+
+            Console.WriteLine("Unable to find the project --MODELGUID " + modelName)
+
             End
+
         End If
+
+
 
         Dim allNodes As List(Of tm6NodesOfModel) = T.getNodesOfProject6(guiD)
+
         Dim allThreats As List(Of tm6ThreatsOfModel) = T.getThreatsOfProject6(guiD)
+
         Dim allSRs As List(Of tm6SRsOfModel) = T.getSRsOfProject6(guiD)
 
+
+
         Console.WriteLine("Project:         " + modelName)
+
         Console.WriteLine("# Threats:       " + allThreats.Count.ToString)
+
         Console.WriteLine("# Requirements:  " + allSRs.Count.ToString)
 
+
+
         Dim currC$ = ""
+
         Dim currT$ = ""
+
         Dim currSR$ = ""
+
         Dim linE$ = ""
 
+
+
         For Each nO In allNodes
+
             currC = qT(nO.Name + " [" + nO.Id.ToString + "]") + "," + qT(nO.FullName) + ","
+
             linE = currC
 
+
+
+            Dim noSRs As Boolean = True
+
+            Dim noTHs As Boolean = True
+
+
+
             ' direct SRs first
+
             For Each sR In allSRs
-                If sR.sourceType = "Node" And sR.elementId = nO.Id Then
+
+                If sR.sourceType = "Node" And sR.sourceId = nO.Id Then
+
+                    noSRs = False
+
                     Console.WriteLine(linE + ",," + qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName))
+
                     If doCSV Then Print(FF, linE + ",," + qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName) + vbCrLf)
+
                 End If
+
             Next
+
+
+
+            If nO.ComponentTypeName = "Security Control" Then GoTo skipSecurityControls
+
+
 
             For Each tH In allThreats
-                Dim noSRs As Boolean = True
-                Dim noTHs As Boolean = True
+
+                If tH.sourceType <> "Node" Or tH.elementId <> nO.Id Then GoTo skipThreat
+
+
+
+                noTHs = False
+
+
 
                 currT = qT(tH.threatName + " [" + tH.id.ToString + "]") + "," + qT(tH.statusName) + ","
-                If tH.elementId = nO.Id Then
-                    noTHs = False
-                    linE = currC + currT
-                End If
 
-                Dim oldLine$ = ""
+                linE = currC + currT
 
-                For Each sR In allSRs
-                    If sR.sourceType = "Node" Then GoTo skipSR
-                    If sR.sourceName = tH.threatName And sR.elementId = nO.Id And tH.elementId = nO.Id Then
-                        noSRs = False
-                        currSR = qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName)
-                        linE = currC + currT
 
-                        Dim pLine$ = ""
 
-                        If linE = oldline Then
-                            pLine = ",,,,"
-                        Else
-                            pLine = linE
+                Dim srSofThreat As List(Of tm6SRsOfModel) = New List(Of tm6SRsOfModel)
+
+                srSofThreat = T.getSRsOfThreat6(guiD, tH.id)
+
+
+
+                Dim firstLine As Boolean = True
+
+
+
+                For Each sR In srSofThreat
+
+                    noSRs = False
+
+                    Dim srString$ = ""
+
+                    srString = qT(sR.securityRequirementName + " [" + sR.id.ToString + "]") + "," + qT(sR.statusName)
+
+
+
+                    If firstLine = True Then
+
+                        Console.WriteLine(linE + "," + srString)
+
+                        If doCSV = True Then
+
+                            Print(FF, linE + srString + vbCrLf)
+
                         End If
 
-                        oldLine = linE
+                    Else
 
-                        Console.WriteLine(linE + currSR)
-                        If doCSV Then Print(FF, pLine + currSR + vbCrLf)
+                        Console.WriteLine(",,,," + srString)
+
+                        If doCSV = True Then
+
+                            Print(FF, ",,,," + srString + vbCrLf)
+
+                        End If
+
                     End If
-skipSR:
+
+                    firstLine = False
+
                 Next
-                If noSRs = True And noTHs = False Then
-                    'FIX THIS - Make sure it supports direct SRs and Threats with no SRs
-                    Console.WriteLine(linE + ",,")
-                    If doCSV Then Print(FF, linE + ",," + vbCrLf)
-                End If
+
+
+
+skipThreat:
+
             Next
+
+
+
+            If noTHs = True And noSRs = True Then
+
+                Console.WriteLine(currC + ",,,,")
+
+                If doCSV = True Then
+
+                    Print(FF, currC + ",,,," + vbCrLf)
+
+                End If
+
+            End If
+
+
+
+skipSecurityControls:
+
         Next
 
+
+
         If doCSV = True Then
+
             FileClose(FF)
+
         End If
+
     End Sub
     Private Sub getProj6(args() As String)
 
@@ -10798,6 +10930,7 @@ skipThisOne3:
     End Function
 
     Private Sub giveHelp()
+        Console.WriteLine(fLine("proj_report", "Returns detailed report of a model,arg: use --MODELGUID (guid), OPT --FILE (csv filename)"))
         Console.WriteLine("USAGE: TMCLI action --param1 param1_value --param2 param2_value" + vbCrLf)
         Console.WriteLine("ACTIONS:")
         Console.WriteLine("--------")

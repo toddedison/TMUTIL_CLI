@@ -453,6 +453,17 @@ errorcatch:
         getSRsOfProject6 = JsonConvert.DeserializeObject(Of List(Of tm6SRsOfModel))(jsoN)
 
     End Function
+
+    Public Function getSRsOfThreat6(guiD$, threatID As Long) As List(Of tm6SRsOfModel)
+
+        getSRsOfThreat6 = New List(Of tm6SRsOfModel)
+
+        Dim jsoN$ = getAPIData("/api/project/" + guiD + "/allsecurityrequirements?ProjectThreatIds=" + threatID.ToString)
+
+        getSRsOfThreat6 = JsonConvert.DeserializeObject(Of List(Of tm6SRsOfModel))(jsoN)
+
+    End Function
+
     Public Function getThreatsOfProject6(guiD$) As List(Of tm6ThreatsOfModel)
         getThreatsOfProject6 = New List(Of tm6ThreatsOfModel)
 
